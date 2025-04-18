@@ -47,8 +47,8 @@ const Discuss = () => {
   };
 
   return (
-    <div className="flex justify-center items-center h-screen bg-gray-950 ">
-      <div className="flex h-[90vh] w-[90vw] max-w-[1440px] max-h-[900px] bg-gray-900 text-gray-200 rounded-lg shadow-lg overflow-hidden">
+    <div className="flex justify-center items-center min-h-screen bg-gray-950 ">
+      <div className="flex  w-full h-full  bg-gray-900 text-gray-200 shadow-lg overflow-hidden">
         {/* Sidebar */}
         <aside className="w-1/4 bg-gray-800 p-5">
           <h2 className="text-2xl font-semibold mb-6 border-b border-gray-700 pb-2">Departments</h2>
