@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import Modal from "react-modal";
+import { buildApiUrl } from "../config/api";
 
 const customModalStyles = {
   content: {
@@ -57,6 +58,7 @@ function Projects() {
   });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModal, setIsEditModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProject, setSelectedProject] = useState(null); // Store selected project for viewing
 
@@ -81,9 +83,15 @@ function Projects() {
     }
   };
 
-  const filteredProjects = projects.filter((project) =>
-    project.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProjects = projects.filter((project) => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return true;
+    const name = (project.name || "").toLowerCase();
+    const desc = (project.description || "").toLowerCase();
+    const status = (project.status || "").toLowerCase();
+    const head = (project.projectHead || "").toLowerCase();
+    return name.includes(q) || desc.includes(q) || status.includes(q) || head.includes(q);
+  });
 
   const categorizedProjects = (status) =>
     filteredProjects.filter((project) => project.status === status);
@@ -103,7 +111,7 @@ function Projects() {
 
     try {
       const response = await fetch(
-        `http://${import.meta.env.VITE_BACKEND}/api/updateproject/${selectedProject._id}`,
+        buildApiUrl(`/api/updateproject/${selectedProject._id}`),
         {
           method: "PUT",
           headers: {
@@ -131,8 +139,14 @@ function Projects() {
 
   const handleEditProject = (project) => {
     setSelectedProject(project);
-    setIsEditModal(true); // Switch to edit modal
+    setIsEditModal(true);
     setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setIsEditModal(false);
+    setSelectedProject(null);
   };
   return (
     <div className="bg-[#101114] min-h-screen p-8 text-gray-100">
@@ -178,11 +192,13 @@ function Projects() {
       {selectedProject && (
         <Modal
           isOpen={isModalOpen}
-          onRequestClose={() => setIsModalOpen(false)}
+          onRequestClose={closeModal}
           style={customModalStyles}
           ariaHideApp={false}
         >
-          <h2 className="text-xl font-bold mb-4">{selectedProject.name}</h2>
+          <h2 className="text-xl font-bold mb-4">
+            {isEditModal ? "Edit Project" : selectedProject.name}
+          </h2>
           <p className="text-gray-400">{selectedProject.description}</p>
           <p className="mt-2 text-sm text-gray-500">
             <strong>Project Head:</strong> {selectedProject.projectHead}
@@ -192,7 +208,7 @@ function Projects() {
           </p>
           <div className="flex justify-end mt-6">
             <button
-              onClick={() => setIsModalOpen(false)}
+              onClick={closeModal}
               className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700"
             >
               Close
@@ -204,12 +220,14 @@ function Projects() {
       {/* Modal for Adding Projects */}
       <Modal
         isOpen={isModalOpen}
-        onRequestClose={() => setIsModalOpen(false)}
+        onRequestClose={closeModal}
         style={customModalStyles}
         ariaHideApp={false}
       >
         
-        <h2 className="text-xl font-bold mb-4">Create New Project</h2>
+        <h2 className="text-xl font-bold mb-4">
+          {isEditModal ? "Edit Project" : "Create New Project"}
+        </h2>
         <div className="space-y-4">
           <input
             type="text"

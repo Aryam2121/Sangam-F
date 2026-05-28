@@ -80,28 +80,28 @@ const BiddingPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white px-4 py-8">
-      <h1 className="text-3xl font-semibold mb-6">Bidding System</h1>
-
-      <button
-        onClick={() => setShowResourceForm(true)}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mb-4"
-      >
-        Add New Resource
-      </button>
-
-      <button
-        onClick={() => setShowFeedbackForm(true)}
-        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 mb-6 ml-4"
-      >
-        Provide Feedback
-      </button>
+    <div className="page pb-10">
+      <div className="glass-panel mb-6 flex flex-wrap items-center justify-between gap-4 p-6">
+        <div>
+          <p className="page-kicker">Procurement</p>
+          <h1 className="page-title mt-2">Bidding System</h1>
+          <p className="page-subtitle">Add resources, collect bids, and track payment status.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setShowResourceForm(true)} className="btn btn-primary">
+            Add Resource
+          </button>
+          <button type="button" onClick={() => setShowFeedbackForm(true)} className="btn">
+            Feedback
+          </button>
+        </div>
+      </div>
 
       {/* Resource Cards */}
       {resources.map((resource) => (
         <div
           key={resource.id}
-          className="bg-gray-800 p-4 rounded-lg shadow-md mb-6 flex flex-col md:flex-row gap-4 hover:bg-gray-700 transition-all"
+          className="glass-panel mb-6 flex flex-col gap-4 p-4 md:flex-row"
         >
           {/* Resource Image */}
           <img

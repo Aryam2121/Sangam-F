@@ -1,171 +1,187 @@
-import React, { useState } from "react";
-import SeminarImage from '../assets/seminar.jpg';
+import React, { useEffect, useState } from "react";
+import { BiLinkExternal, BiPlus } from "react-icons/bi";
+import toast from "react-hot-toast";
+import SeminarImage from "../assets/seminar.jpg";
+import PageHeader from "./ui/PageHeader";
+import { createSeminar, fetchSeminars } from "../services/sangamApi";
+import { useAuth } from "../context/AuthContext";
+
+const formatDate = (value) => {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
 
 const Seminar = () => {
-  const [seminars, setSeminars] = useState([
-    {
-      title: "How to use various tools?",
-      description: "Learn how to properly use a variety of tools for different purposes.",
-      author: "Mr. Brijesh",
-      date: "10 November 2024",
-    },
-    {
-      title: "How to check the material in road?",
-      description: "Techniques to evaluate the quality of road construction materials.",
-      author: "Mr. Aryaman",
-      date: "10 November 2024",
-    },
-    {
-      title: "How to do wiring of electricity wiring?",
-      description: "A step-by-step guide to safely wire electrical systems.",
-      author: "Mr. Harshit",
-      date: "10 November 2024",
-    },
-    {
-        title: "How to do wiring of electricity wiring?",
-        description: "A step-by-step guide to safely wire electrical systems.",
-        author: "Mr. Deepak",
-        date: "10 November 2024",
-      },
-  ]);
-
-
-  const [newSeminar, setNewSeminar] = useState({
-    title: "",
+  const { userData } = useAuth();
+  const [seminars, setSeminars] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    publisherName: "",
+    seminarLink: "",
     description: "",
-    author: "",
-    date: "",
   });
 
+  const canCreate = ["Main Admin", "Officer", "Department Admin"].includes(
+    userData?.role || localStorage.getItem("userRole") || ""
+  );
 
-  const [showModal, setShowModal] = useState(false);
-
-
-  const handleUpload = () => {
-    if (newSeminar.title && newSeminar.description && newSeminar.author && newSeminar.date) {
-      setSeminars([...seminars, newSeminar]);
-      setNewSeminar({ title: "", description: "", author: "", date: "" });
-      setShowModal(false);
-    } else {
-      alert("Please fill in all fields.");
+  const loadSeminars = async () => {
+    try {
+      setLoading(true);
+      const list = await fetchSeminars();
+      setSeminars(list);
+    } catch {
+      toast.error("Failed to load seminars");
+    } finally {
+      setLoading(false);
     }
   };
 
+  useEffect(() => {
+    loadSeminars();
+  }, []);
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    if (!form.publisherName.trim() || !form.seminarLink.trim()) {
+      toast.error("Author and seminar link are required");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await createSeminar({
+        publisherName: form.publisherName.trim(),
+        seminarLink: form.seminarLink.trim(),
+        description: form.description.trim(),
+      });
+      toast.success("Seminar published");
+      setForm({ publisherName: "", seminarLink: "", description: "" });
+      setShowModal(false);
+      loadSeminars();
+    } catch (err) {
+      toast.error(err.message || "Failed to create seminar");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
-    <div className="bg-gradient-to-b from-[#1A202C] to-[#101114] min-h-screen text-white p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-4xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-          Seminars
-        </h1>
-        {/* <button
-          onClick={() => setShowModal(true)}
-          className="bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-2 rounded-md shadow-lg hover:scale-105 transform transition"
-        >
-          + Add Seminar
-        </button> */}
-      </div>
+    <div className="page pb-10">
+      <PageHeader
+        kicker="Training"
+        title="Seminars"
+        subtitle="Published sessions and learning links from your team."
+        actions={
+          canCreate && (
+            <button type="button" onClick={() => setShowModal(true)} className="btn btn-primary">
+              <BiPlus />
+              Add seminar
+            </button>
+          )
+        }
+      />
 
-
-      {/* Seminar List */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {seminars.map((seminar, index) => (
-          <div
-            key={index}
-            className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-lg shadow-lg flex items-center overflow-hidden transform hover:scale-105 transition duration-300"
-          >
-            {/* Left: Thumbnail */}
-            <img
-              src={SeminarImage}
-              alt="thumbnail"
-              className="w-36 h-36 object-cover rounded-l-lg"
-            />
-            {/* Right: Seminar Details */}
-            <div className="p-5 flex-grow">
-              <h2 className="text-2xl font-bold text-white">{seminar.title}</h2>
-              <p className="text-gray-400 text-sm mt-3 leading-relaxed">{seminar.description}</p>
-              <div className="mt-3 flex justify-between items-center">
-                <p className="text-gray-400">
-                  By <span className="text-blue-400 font-medium">{seminar.author}</span>
+      {loading ? (
+        <div className="glass-panel flex justify-center p-12">
+          <div className="loading-spinner" />
+        </div>
+      ) : seminars.length === 0 ? (
+        <div className="glass-panel p-12 text-center text-slate-400">
+          No seminars yet. {canCreate ? "Add the first one above." : "Check back later."}
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {seminars.map((seminar) => (
+            <article
+              key={seminar._id}
+              className="glass-card flex overflow-hidden transition hover:border-cyan-400/20"
+            >
+              <img src={SeminarImage} alt="" className="h-36 w-36 shrink-0 object-cover" />
+              <div className="min-w-0 flex-1 p-5">
+                <a
+                  href={seminar.seminarLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-lg font-semibold text-cyan-200 hover:text-cyan-100"
+                >
+                  {seminar.seminarLink.replace(/^https?:\/\//, "").slice(0, 48)}
+                  {seminar.seminarLink.length > 48 ? "…" : ""}
+                  <BiLinkExternal />
+                </a>
+                <p className="mt-2 line-clamp-3 text-sm text-slate-300">
+                  {seminar.description || "No description"}
                 </p>
-                <p className="text-sm text-gray-500">📅 {seminar.date}</p>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+                  <span>
+                    By <span className="text-slate-200">{seminar.publisherName}</span>
+                  </span>
+                  <span>{formatDate(seminar.createdAt)}</span>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <form onSubmit={handleCreate} className="glass-panel w-full max-w-md p-6">
+            <h2 className="text-xl font-semibold text-white">Add seminar</h2>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="mb-2 block text-xs uppercase tracking-wider text-slate-400">
+                  Author / publisher
+                </label>
+                <input
+                  value={form.publisherName}
+                  onChange={(e) => setForm({ ...form, publisherName: e.target.value })}
+                  placeholder="Your name"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-xs uppercase tracking-wider text-slate-400">
+                  Seminar link (URL)
+                </label>
+                <input
+                  type="url"
+                  value={form.seminarLink}
+                  onChange={(e) => setForm({ ...form, seminarLink: e.target.value })}
+                  placeholder="https://..."
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-xs uppercase tracking-wider text-slate-400">
+                  Description
+                </label>
+                <textarea
+                  rows={3}
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  placeholder="What will attendees learn?"
+                />
               </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-gray-900 p-6 rounded-lg shadow-2xl w-full max-w-md">
-            <h2 className="text-3xl font-extrabold mb-4 text-center text-gradient">
-              Add New Seminar
-            </h2>
-            <form className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Seminar Title</label>
-                <input
-                  type="text"
-                  placeholder="Enter seminar title"
-                  className="mt-1 w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-blue-500"
-                  value={newSeminar.title}
-                  onChange={(e) => setNewSeminar({ ...newSeminar, title: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Description</label>
-                <textarea
-                  placeholder="Enter seminar description"
-                  className="mt-1 w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-blue-500"
-                  value={newSeminar.description}
-                  onChange={(e) => setNewSeminar({ ...newSeminar, description: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Author Name</label>
-                <input
-                  type="text"
-                  placeholder="Enter author name"
-                  className="mt-1 w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-blue-500"
-                  value={newSeminar.author}
-                  onChange={(e) => setNewSeminar({ ...newSeminar, author: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Publish Date</label>
-                <input
-                  type="date"
-                  className="mt-1 w-full p-3 rounded-md bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-blue-500"
-                  value={newSeminar.date}
-                  onChange={(e) => setNewSeminar({ ...newSeminar, date: e.target.value })}
-                />
-              </div>
-              <div className="flex justify-end space-x-4">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-md bg-gray-700 hover:bg-gray-600 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleUpload}
-                  className="px-4 py-2 rounded-md bg-gradient-to-r from-blue-500 to-purple-600 shadow-lg hover:scale-105 transform transition"
-                >
-                  Add Seminar
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="mt-6 flex gap-3">
+              <button type="button" className="btn flex-1" onClick={() => setShowModal(false)}>
+                Cancel
+              </button>
+              <button type="submit" disabled={submitting} className="btn btn-primary flex-1">
+                {submitting ? "Saving..." : "Publish"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>
   );
 };
-
 
 export default Seminar;

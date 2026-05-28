@@ -11,35 +11,53 @@ import {
   FaEdit,
   FaTrashAlt,
 } from 'react-icons/fa';
+import { APP_API_BASE_URL, buildApiUrl, getAuthHeaders } from '../config/api';
+import { useAuth } from '../context/AuthContext';
 
-const socket = io(import.meta.env.VITE_SANGAM_B); // Replace with your server's URL
-
-const profiles = [
-  {
-    name: 'Aryaman',
-    avatar: 'https://bootdey.com/img/Content/avatar/avatar2.png',
-    status: 'Online',
-    chatHistory: [],
-  },
-  {
-    name: 'Brijesh',
-    avatar: 'https://bootdey.com/img/Content/avatar/avatar1.png',
-    status: 'Offline',
-    chatHistory: [],
-  },
-];
+const socket = io(APP_API_BASE_URL, { withCredentials: true });
 
 const ChatApp = () => {
+  const { userData } = useAuth();
+  const senderName = userData?.fullName || userData?.username || 'You';
   const [message, setMessage] = useState('');
-  const [selectedProfile, setSelectedProfile] = useState(profiles[0]);
+  const [profiles, setProfiles] = useState([]);
+  const [selectedProfile, setSelectedProfile] = useState(null);
   const [typing, setTyping] = useState(false);
   const [chatHistory, setChatHistory] = useState([]); // Local chat history
 
   useEffect(() => {
+    const loadProfiles = async () => {
+      try {
+        const response = await fetch(buildApiUrl('/admin/getalluser'), {
+          headers: {
+            ...getAuthHeaders(),
+          },
+          credentials: 'include',
+        });
+        const data = await response.json();
+        const users = Array.isArray(data?.data) ? data.data : data;
+        const mapped = (users || []).map((user) => ({
+          name: user.fullName || user.username,
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName || user.username)}&background=0f172a&color=22d3ee&bold=true`,
+          status: 'Online',
+          chatHistory: [],
+        }));
+        setProfiles(mapped);
+        setSelectedProfile((prev) => prev || mapped[0] || null);
+      } catch (error) {
+        console.error('Error fetching chat contacts:', error);
+      }
+    };
+
+    loadProfiles();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedProfile) return;
     // Load chat history from backend when a profile is selected
     const fetchChatHistory = async () => {
       try {
-        const response = await axios.get(`/api/chat/history/${selectedProfile.name}`);
+        const response = await axios.get(buildApiUrl(`/api/chat/history/${selectedProfile.name}`));
         // Ensure the data is an array
         const history = Array.isArray(response.data) ? response.data : [];
         setChatHistory(history); // Set the fetched chat history
@@ -75,9 +93,9 @@ const ChatApp = () => {
 
   const sendMessage = async (e) => {
     e.preventDefault();
-    if (message.trim()) {
+    if (message.trim() && selectedProfile) {
       const newMessage = {
-        sender: 'You',
+        sender: senderName,
         text: message,
         receiver: selectedProfile.name,
       };
@@ -87,7 +105,7 @@ const ChatApp = () => {
 
       // Store the message in the backend (MongoDB)
       try {
-        await axios.post('/api/chat/send', newMessage);
+        await axios.post(buildApiUrl('/api/chat/send'), newMessage);
         setChatHistory((prev) => [...prev, newMessage]); // Update local chat history
         setMessage('');
       } catch (error) {
@@ -98,22 +116,22 @@ const ChatApp = () => {
 
   const handleTyping = (e) => {
     setMessage(e.target.value);
-    socket.emit('typing', { sender: 'You', receiver: selectedProfile.name, typing: e.target.value.length > 0 });
+    socket.emit('typing', { sender: senderName, receiver: selectedProfile.name, typing: e.target.value.length > 0 });
   };
 
   return (
-    <div className="min-h-screen mt-4 flex bg-gray-950 text-white">
+    <div className="page flex min-h-[70vh] overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur">
       {/* Sidebar */}
-      <aside className="w-1/4 bg-gray-800 p-5 shadow-lg">
-        <h2 className="text-2xl font-bold mb-5 border-b border-gray-700 pb-2">Contacts</h2>
+      <aside className="w-1/4 bg-white/5 p-5 shadow-2xl backdrop-blur">
+        <h2 className="text-2xl font-bold mb-5 border-b border-white/10 pb-2">Contacts</h2>
         <ul className="space-y-3">
           {profiles.map((profile, index) => (
             <li
               key={index}
-              className={`p-3 rounded-lg cursor-pointer transition-transform hover:scale-105 ${
+              className={`p-3 rounded-2xl cursor-pointer transition-transform hover:scale-[1.02] ${
                 selectedProfile.name === profile.name
-                  ? 'bg-gray-700 shadow-md'
-                  : 'hover:bg-gray-700'
+                  ? 'bg-white/10 shadow-lg'
+                  : 'hover:bg-white/5'
               }`}
               onClick={() => {
                 setSelectedProfile(profile);
@@ -143,22 +161,22 @@ const ChatApp = () => {
       </aside>
 
       {/* Chat Section */}
-      <section className="flex-1 flex flex-col bg-gray-900 shadow-lg">
+      <section className="flex-1 flex flex-col bg-white/5 shadow-2xl backdrop-blur">
         {/* Chat Header */}
-        <header className="flex items-center p-4 border-b border-gray-700 bg-gray-800">
+        <header className="flex items-center p-4 border-b border-white/10 bg-white/5">
           <img
-            src={selectedProfile.avatar}
-            alt={selectedProfile.name}
+            src={selectedProfile?.avatar}
+            alt={selectedProfile?.name}
             className="w-12 h-12 rounded-full mr-3"
           />
           <div>
-            <h2 className="text-lg font-semibold">{selectedProfile.name}</h2>
-            <p className="text-sm text-gray-400">{typing ? 'Typing...' : selectedProfile.status}</p>
+            <h2 className="text-lg font-semibold">{selectedProfile?.name || 'Select a contact'}</h2>
+            <p className="text-sm text-gray-400">{typing ? 'Typing...' : selectedProfile?.status}</p>
           </div>
         </header>
 
         {/* Chat Messages */}
-        <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-gray-900">
+        <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-transparent">
           <ul>
             {chatHistory.map((msg, index) => (
               <motion.li
@@ -168,8 +186,8 @@ const ChatApp = () => {
                 transition={{ duration: 0.3 }}
                 className={`max-w-[75%] p-3 rounded-lg ${
                   msg.sender === 'You'
-                    ? 'bg-blue-600 ml-auto text-white'
-                    : 'bg-gray-700 text-gray-300'
+                    ? 'bg-cyan-500/90 ml-auto text-slate-900'
+                    : 'bg-white/10 text-slate-200'
                 }`}
               >
                 <p className="text-sm font-semibold mb-1">{msg.sender}</p>
@@ -182,29 +200,31 @@ const ChatApp = () => {
         {/* Message Input */}
         <form
           onSubmit={sendMessage}
-          className="flex items-center p-4 bg-gray-800 border-t border-gray-700"
+          className="flex items-center p-4 border-t border-white/10 bg-white/5"
         >
           <div className="relative w-full">
             <input
               type="text"
               value={message}
               onChange={handleTyping}
-              className="peer p-3 rounded-lg bg-gray-700 text-gray-200 focus:outline-none focus:ring focus:ring-blue-500 w-full"
+                disabled={!selectedProfile}
+                className="peer w-full rounded-lg border border-white/10 bg-slate-900/70 p-3 text-slate-200 focus:outline-none focus:ring focus:ring-cyan-400 disabled:opacity-60"
               id="message"
               placeholder="Type a message"
               required
             />
             <label
               htmlFor="message"
-              className="absolute left-3 text-sm text-gray-400 peer-focus:text-blue-500 top-2 transition-all duration-200 ease-in-out"
+              className="absolute left-3 top-2 text-sm text-slate-400 transition-all duration-200 ease-in-out peer-focus:text-cyan-400"
             >
+             disabled={!selectedProfile}
               Type a message
             </label>
           </div>
 
           <button
             type="submit"
-            className="p-3 bg-blue-600 rounded-lg ml-3 hover:bg-blue-700 transition-transform transform hover:scale-105"
+            className="ml-3 rounded-lg bg-cyan-400 p-3 text-slate-900 transition-transform hover:scale-105 hover:bg-cyan-300"
           >
             <FaPaperPlane className="text-white" />
           </button>

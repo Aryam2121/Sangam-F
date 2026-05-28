@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { FaSpinner } from "react-icons/fa";
+import { buildApiUrl, getAuthHeaders } from "../config/api";
 
 const DepartmentDetails = () => {
   const location = useLocation();
@@ -17,12 +18,13 @@ const DepartmentDetails = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const projectResponse = await fetch(
-          `https://${import.meta.env.VITE_BACKEND}/api/getallprojects`
-        );
-        const userResponse = await fetch(
-          `https://${import.meta.env.VITE_BACKEND}/admin/getalluser`
-        );
+        const projectResponse = await fetch(buildApiUrl('/api/getallprojects'));
+        const userResponse = await fetch(buildApiUrl('/admin/getalluser'), {
+          headers: {
+            ...getAuthHeaders(),
+          },
+          credentials: 'include',
+        });
 
         if (!projectResponse.ok || !userResponse.ok) {
           throw new Error("Failed to fetch data");
@@ -31,9 +33,23 @@ const DepartmentDetails = () => {
         const projectsData = await projectResponse.json();
         const usersData = await userResponse.json();
 
+        const filteredProjects = (projectsData || []).filter((project) => {
+          const departments = project.departments || [];
+          return departments.some((dept) =>
+            (typeof dept === 'string' ? dept : dept?.name)
+              ?.toLowerCase()
+              .includes(departmentName.toLowerCase())
+          );
+        });
+
+        const rawUsers = Array.isArray(usersData?.data) ? usersData.data : usersData;
+        const filteredUsers = (rawUsers || []).filter((user) =>
+          user.department?.toLowerCase() === departmentName.toLowerCase()
+        );
+
         // Limit to 5 projects and users
-        setProjects(projectsData.slice(0, 5));
-        setUsers(usersData.slice(0, 5));
+        setProjects(filteredProjects.slice(0, 6));
+        setUsers(filteredUsers.slice(0, 6));
       } catch (err) {
         setError(err.message);
         toast.error("Failed to load data");
@@ -46,12 +62,14 @@ const DepartmentDetails = () => {
   }, []);
 
   return (
-    <div className="bg-gradient-to-br from-[#101114] via-[#181a25] to-[#101114] min-h-screen p-6">
+    <div className="page pb-10">
       <ToastContainer />
-      <div className="max-w-6xl mx-auto">
-        <h2 className="text-5xl font-extrabold text-white mb-8 border-b border-gray-600 pb-3">
-          {departmentName}
-        </h2>
+      <div className="mx-auto max-w-6xl">
+        <div className="glass-panel mb-8 p-6">
+          <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Department</p>
+          <h2 className="mt-3 text-4xl font-semibold text-white">{departmentName}</h2>
+          <p className="mt-2 text-sm text-slate-300">Projects and people aligned to this division.</p>
+        </div>
 
         {loading ? (
           <div className="flex justify-center items-center h-[50vh]">
@@ -66,44 +84,44 @@ const DepartmentDetails = () => {
           <>
             {/* Projects Section */}
             <div className="mb-12">
-              <h3 className="text-3xl font-semibold text-white mb-6">Projects</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              <h3 className="text-2xl font-semibold text-white mb-6">Projects</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {projects.length > 0 ? (
                   projects.map((project) => (
                     <div
-                      key={project.id}
-                      className="bg-gradient-to-r from-[#4a6ea7] via-[#5a7cbf] to-[#4a6ea7] p-6 rounded-lg shadow-lg transform transition-all hover:scale-105 hover:shadow-2xl"
+                      key={project._id}
+                      className="glass-card p-6 transition-transform hover:-translate-y-1"
                     >
-                      <h4 className="text-xl font-bold text-white mb-2">
+                      <h4 className="text-xl font-semibold text-white mb-2">
                         {project.name}
                       </h4>
-                      <p className="text-gray-200">{project.description}</p>
+                      <p className="text-slate-300 text-sm">{project.description}</p>
                     </div>
                   ))
                 ) : (
-                  <p className="text-gray-400">No projects available.</p>
+                  <p className="text-slate-400">No projects available.</p>
                 )}
               </div>
             </div>
 
             {/* Users Section */}
             <div>
-              <h3 className="text-3xl font-semibold text-white mb-6">Users</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              <h3 className="text-2xl font-semibold text-white mb-6">Users</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {users.length > 0 ? (
                   users.map((user) => (
                     <div
-                      key={user.id}
-                      className="bg-gradient-to-r from-[#4d8c5d] via-[#5d9f6d] to-[#4d8c5d] p-6 rounded-lg shadow-lg transform transition-all hover:scale-105 hover:shadow-2xl"
+                      key={user._id}
+                      className="glass-card p-6 transition-transform hover:-translate-y-1"
                     >
-                      <h4 className="text-xl font-bold text-white mb-2">
+                      <h4 className="text-xl font-semibold text-white mb-2">
                         {user.username || user.name} {/* Use 'username' if available, otherwise fallback to 'name' */}
                       </h4>
-                      <p className="text-gray-200">{user.email}</p>
+                      <p className="text-slate-300 text-sm">{user.email}</p>
                     </div>
                   ))
                 ) : (
-                  <p className="text-gray-400">No users available.</p>
+                  <p className="text-slate-400">No users available.</p>
                 )}
               </div>
             </div>

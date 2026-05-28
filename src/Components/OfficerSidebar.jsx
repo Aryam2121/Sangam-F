@@ -1,166 +1,77 @@
-// my code
+import React from 'react';
+import { BiBookAlt, BiHome, BiStats, BiTask, BiChevronLeft, BiChevronRight, BiTrain, BiLogOut, BiCurrentLocation, BiMessageRounded } from "react-icons/bi";
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useSidebar, getNavPillClass, getNavIconClass } from '../context/SidebarContext';
 
-import React, { useState } from 'react';
-import { BiBookAlt, BiHome, BiMessage, BiSolidReport, BiStats, BiTask, BiChevronLeft, BiChevronRight, BiTrain, BiLogoDiscord, BiLogOut, BiCurrentLocation } from "react-icons/bi";
-import { Link, useLocation } from 'react-router-dom';
-import Navbar from './Navbar';
+const navItems = [
+  { to: '/', icon: BiHome, label: 'Dashboard', match: (p) => p === '/' || p === '/dashboard' },
+  { to: '/taskManager', icon: BiTask, label: 'Tasks' },
+  { to: '/projects', icon: BiBookAlt, label: 'Projects' },
+  { to: '/resources', icon: BiStats, label: 'Resources' },
+  { to: '/training', icon: BiTrain, label: 'Training' },
+  { to: '/discussion', icon: BiMessageRounded, label: 'Discussion' },
+  { to: '/gisnew', icon: BiCurrentLocation, label: 'GeoLocation' },
+  { to: '/BidSystem', icon: BiCurrentLocation, label: 'Bidding' },
+];
+
 const OfficerSidebar = () => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const { collapsed, toggle, sidebarWidth } = useSidebar();
 
-  const handleToggleSidebar = () => {
-    setIsCollapsed(!isCollapsed);
-  };
-
-  const handleLogout = () => {
-    // Clear user data from localStorage or any other storage
-    localStorage.removeItem("authToken"); // Example: remove the stored token
-    localStorage.removeItem("user"); // Optional: remove user details
-
-    // Optionally clear other application state (e.g., Redux, Context API, etc.)
-
-    // Redirect to login page
-    navigate("/login");
-  };
+  const isActive = (item) =>
+    item.match ? item.match(location.pathname) : location.pathname === item.to;
 
   return (
-    <div>
-      <Navbar/>
-   
-    <div className="flex">
-      {/* Sidebar */}
-      <div
-        className={`bg-gray-900 ${
-          isCollapsed ? 'w-20' : 'w-64'
-        } transition-all duration-300 fixed top-20 left-0 h-[calc(100vh-5rem)] z-10`}
-      >
-        {/* Logo and Sidebar Toggle */}
-        <div className="flex items-center justify-between p-2">
-          {/* <h2
-            className={`text-white text-lg font-semibold transition-all ${
-              isCollapsed ? 'hidden' : 'block'
-            }`}
-          >
-            Sangam
-          </h2> */}
-          {/* <button
-            onClick={handleToggleSidebar}
-            className="text-white text-2xl hover:text-gray-400 transition-colors"
-          >
-            {isCollapsed ? <BiChevronRight /> : <BiChevronLeft />}
-          </button> */}
-        </div>
-
-        {/* Menu List */}
-        <div className="mt-8 overflow-y-auto">
-          <Link
-            to="/"
-            className={`flex items-center gap-4 p-5 transition-colors ${
-              location.pathname === '/'
-                ? 'bg-gray-700 text-yellow-500'
-                : 'text-white hover:bg-gray-700'
-            }`}
-          >
-            <BiHome className="text-2xl" />
-            {!isCollapsed && <span>Dashboard</span>}
-          </Link>
-          <Link 
-            to="/taskManager" 
-            className={`flex items-center gap-4 p-5 transition-colors ${location.pathname === '/taskManager' ? 'bg-gray-700 text-yellow-500' : 'text-white hover:bg-gray-700'}`}
-          >
-            <BiTask className="text-2xl" />
-            {!isCollapsed && <span>Tasks</span>}
-          </Link>
-          <Link 
-            to="/projects" 
-            className={`flex items-center gap-4 p-5 transition-colors ${location.pathname === '/projects' ? 'bg-gray-700 text-yellow-500' : 'text-white hover:bg-gray-700'}`}
-          >
-            <BiBookAlt className="text-2xl" />
-            {!isCollapsed && <span>Projects</span>}
-          </Link>
-          {/* <Link 
-            to="/projectdetails" 
-            className={`flex items-center gap-4 p-5 transition-colors ${location.pathname === '/projectdetails' ? 'bg-gray-700 text-yellow-500' : 'text-white hover:bg-gray-700'}`}
-          >
-            <BiBookAlt className="text-2xl" />
-            {!isCollapsed && <span>Project Desc</span>}
-          </Link> */}
-          {/* <Link 
-            to="/projectmanagement" 
-            className={`flex items-center gap-4 p-5 transition-colors ${location.pathname === '/projectmanagement' ? 'bg-gray-700 text-yellow-500' : 'text-white hover:bg-gray-700'}`}
-          >
-            <BiSolidReport className="text-2xl" />
-            {!isCollapsed && <span>Project Management</span>}
-          </Link> */}
-          <Link 
-            to="/resources" 
-            className={`flex items-center gap-4 p-5 transition-colors ${location.pathname === '/resources' ? 'bg-gray-700 text-yellow-500' : 'text-white hover:bg-gray-700'}`}
-          >
-            <BiStats className="text-2xl" />
-            {!isCollapsed && <span>Resources</span>}
-          </Link>
-          <Link 
-            to="/training" 
-            className={`flex items-center gap-4 p-5 transition-colors ${location.pathname === '/training' ? 'bg-gray-700 text-yellow-500' : 'text-white hover:bg-gray-700'}`}
-          >
-            <BiTrain className="text-2xl" />
-            {!isCollapsed && <span>Training</span>}
-          </Link> 
-          <Link 
-            to="/discussion" 
-            className={`flex items-center gap-4 p-5 transition-colors ${location.pathname === '/discussion' ? 'bg-gray-700 text-yellow-500' : 'text-white hover:bg-gray-700'}`}
-          >
-            <BiTrain className="text-2xl" />
-            {!isCollapsed && <span>Discussion</span>}
-          </Link> 
-         
-          <Link 
-            to="/gisnew" 
-            className={`flex items-center gap-4 p-5 transition-colors ${location.pathname === '/gisnew' ? 'bg-gray-700 text-yellow-500' : 'text-white hover:bg-gray-700'}`}
-          >
-            <BiCurrentLocation className="text-2xl" />
-            {!isCollapsed && <span>GeoLocation InterFace</span>}
-          </Link>
-          <Link 
-            to="/BidSystem" 
-            className={`flex items-center gap-4 p-5 transition-colors ${location.pathname === '/BidSystem' ? 'bg-gray-700 text-yellow-500' : 'text-white hover:bg-gray-700'}`}
-          >
-            <BiCurrentLocation className="text-2xl" />
-            {!isCollapsed && <span>BidSystem</span>}
-          </Link>
-          {/* <Link 
-            to="/Bidding" 
-            className={`flex items-center gap-4 p-5 transition-colors ${location.pathname === '/Bidding' ? 'bg-gray-700 text-yellow-500' : 'text-white hover:bg-gray-700'}`}
-          >
-            <BiCurrentLocation className="text-2xl" />
-            {!isCollapsed && <span>Bidding</span>}
-          </Link> */}
-          <Link 
-            to="/login" 
-            onClick={handleLogout}
-            className={`flex items-center gap-4 p-5 transition-colors ${location.pathname === '/logout' ? 'bg-gray-700 text-yellow-500' : 'text-white hover:bg-gray-700'}`}
-          >
-            <BiLogOut className="text-2xl" />
-            {!isCollapsed && <span>Logout</span>}
-          </Link>
-        </div>
+    <aside
+      className={`glass-panel fixed left-0 top-16 z-30 hidden max-h-[calc(100vh-4rem)] shrink-0 overflow-hidden transition-all duration-300 ease-in-out md:left-6 md:top-[calc(4rem+1.5rem)] md:block md:max-h-[calc(100vh-4rem-3rem)] md:h-[calc(100vh-4rem-3rem)] ${sidebarWidth} ${
+        collapsed ? 'p-3' : 'p-4'
+      }`}
+    >
+      <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
+        {!collapsed && (
+          <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Officer</p>
+        )}
+        <button
+          onClick={toggle}
+          className={`rounded-2xl border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 ${
+            collapsed ? 'p-2.5' : 'p-2'
+          }`}
+          type="button"
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <BiChevronRight className="text-2xl" /> : <BiChevronLeft className="text-xl" />}
+        </button>
       </div>
 
-      {/* Main Content Area */}
-      <div
-        // className={`transition-all duration-300 w-full ml-${isCollapsed ? '20' : '64'}`}
-        // style={{ marginLeft: isCollapsed ? '5rem' : '16rem' ,marginTop:500}}
-        className={`transition-all duration-300 w-full`}
-        style={{
-          marginLeft: isCollapsed ? '5rem' : '16rem', // Adjust based on sidebar width
-          paddingTop: '5rem', // Match the height of the Navbar
-        }}
-      >
-        {/* Your main content goes here */}
-       
+      <div className="mt-5 flex h-[calc(100%-3rem)] flex-col gap-1.5 sidebar-scroll overflow-y-auto">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.to + item.label}
+              to={item.to}
+              title={collapsed ? item.label : undefined}
+              className={getNavPillClass(isActive(item), collapsed)}
+            >
+              <Icon className={getNavIconClass(collapsed)} />
+              {!collapsed && <span className="truncate">{item.label}</span>}
+            </Link>
+          );
+        })}
+        <button
+          onClick={() => { logout(); navigate('/login'); }}
+          className={getNavPillClass(false, collapsed)}
+          type="button"
+          title={collapsed ? 'Logout' : undefined}
+        >
+          <BiLogOut className={getNavIconClass(collapsed)} />
+          {!collapsed && <span className="truncate">Logout</span>}
+        </button>
       </div>
-    </div>
-    </div>
+    </aside>
   );
 };
 

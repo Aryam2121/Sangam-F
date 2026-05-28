@@ -1,11 +1,42 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import axios from "axios";  // Import axios for making HTTP requests
-import photo from "../assets/register.png"; // Update path if necessary
-// import loginpage from './LoginPage';
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import axios from "axios";
+import {
+  BiUser,
+  BiEnvelope,
+  BiLock,
+  BiBuilding,
+  BiIdCard,
+  BiShow,
+  BiHide,
+} from "react-icons/bi";
+import photo from "../assets/register.png";
+import toast from "react-hot-toast";
+import { buildApiUrl } from "../config/api";
+import AuthLayout, { AuthField, AuthLink } from "../Components/ui/AuthLayout";
+import GoogleSignInButton from "../Components/ui/GoogleSignInButton";
+import { useGoogleAuth } from "../hooks/useGoogleAuth";
+import { useAuth } from "../context/AuthContext";
+import { googleRegister } from "../services/sangamApi";
+import { homePathForRole } from "../utils/authRedirect";
+import { completeAuthSession } from "../utils/completeAuthSession";
+import { generateFcmToken } from "../config/firebase";
+
+const DEPARTMENTS = ["Water", "Gas", "Road Construction"];
+const ROLES = [
+  { value: "Main Admin", label: "Admin" },
+  { value: "Officer", label: "Officer" },
+  { value: "Worker", label: "Worker" },
+];
 
 const Register = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
+  const { signInWithGoogle, googleLoading } = useGoogleAuth();
+  const googlePrefill = location.state?.google;
+  const isGoogleSignup = Boolean(googlePrefill?.idToken);
+
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -14,241 +45,270 @@ const Register = () => {
     role: "",
     department: "",
   });
-  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
-  // Handle form field changes
+  useEffect(() => {
+    if (googlePrefill) {
+      setFormData((prev) => ({
+        ...prev,
+        email: googlePrefill.email || prev.email,
+        fullName: googlePrefill.fullName || prev.fullName,
+      }));
+    }
+  }, [googlePrefill]);
+
+  const isMainAdmin = formData.role === "Main Admin";
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       [name]: value,
-    });
+      ...(name === "role" && value === "Main Admin" ? { department: "" } : {}),
+    }));
   };
-//   console.log(formData);
 
-  // Handle form submission
   const handleRegister = async (event) => {
     event.preventDefault();
-    
-    // Simple validation for password match
-    // if (formData.password !== formData.confirmPassword) {
-    //   setError("Passwords do not match");
-    //   return;
-    // }
-
     setLoading(true);
-    setError(""); // Clear any previous errors
+    setError("");
 
     try {
-        console.log("Payload:", formData);
-        const response = await axios.post(
-            `https://${import.meta.env.VITE_BACKEND}/admin/register`,
-            formData,
-            {
-              headers: {
-                "Content-Type": "application/json", // Ensure the backend understands it's JSON
-              },
-            }
-          );
-          
-      console.log(response)
+      if (isGoogleSignup) {
+        if (!formData.role) {
+          throw new Error("Please select a role");
+        }
+        const fcmToken = await generateFcmToken().catch(() => null);
+        const result = await googleRegister({
+          idToken: googlePrefill.idToken,
+          role: formData.role,
+          department: isMainAdmin ? undefined : formData.department,
+          username: formData.username.trim() || undefined,
+          fullName: formData.fullName.trim(),
+          fcmToken,
+        });
+        const user = result?.user;
+        const accessToken = result?.accessToken;
+        if (!user || !accessToken) {
+          throw new Error("Registration succeeded but login failed");
+        }
+        await completeAuthSession({ login, accessToken, user, fcmToken });
+        toast.success("Welcome to Sangam!");
+        navigate(homePathForRole(user.role));
+        return;
+      }
 
-      setLoading(false);
+      const payload = {
+        ...formData,
+        department: isMainAdmin ? undefined : formData.department,
+      };
+
+      const response = await axios.post(buildApiUrl("/admin/register"), payload);
+
       if (response.status === 201) {
-        // If registration is successful, navigate to login page
-        alert("Account Created Successfully")
+        toast.success("Account created! Please sign in.");
         navigate("/login");
       }
-    } catch (error) {
+    } catch (err) {
+      const message =
+        err?.response?.data?.message || err?.message || "Registration failed. Please try again.";
+      setError(message);
+      toast.error(message);
+    } finally {
       setLoading(false);
-      setError("Registration failed. Please try again later.");
     }
   };
 
+  const inputWithIcon = (Icon, props) => (
+    <div className="relative">
+      <Icon className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-500" />
+      <input {...props} className={`auth-input pl-11 ${props.className || ""}`} />
+    </div>
+  );
+
+  const busy = loading || googleLoading;
+
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-r from-gray-900 via-gray-800 to-black">
-  <form
-    onSubmit={handleRegister}
-    className="flex flex-col md:flex-row bg-white shadow-lg rounded-lg overflow-hidden w-full max-w-4xl"
-  >
-    
+    <AuthLayout
+      title={isGoogleSignup ? "Finish Google sign-up" : "Create your account"}
+      kicker={isGoogleSignup ? "Almost there" : "Create Sangam account"}
+      subtitle={
+        isGoogleSignup
+          ? "Choose your role and department to complete your Sangam workspace."
+          : "Join Sangam with email or Google."
+      }
+      image={photo}
+      imageAlt="Register illustration"
+      reverse
+      footer={
+        <p className="text-center text-sm text-slate-400">
+          Already have an account? <AuthLink to="/login">Sign in</AuthLink>
+        </p>
+      }
+    >
+      {!isGoogleSignup && (
+        <>
+          <GoogleSignInButton onClick={signInWithGoogle} disabled={busy} label="Sign up with Google" />
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-white/10" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase tracking-wider">
+              <span className="bg-slate-950 px-3 text-slate-500">or email</span>
+            </div>
+          </div>
+        </>
+      )}
 
-    {/* left Section with Form */}
-    <div className="flex flex-col flex-1 p-10 space-y-6">
-      <h2 className="text-2xl font-bold text-gray-800 text-center">
-        Create an Account
-      </h2>
-      <p className="text-center text-gray-600">
-        Join now and enjoy exclusive access!
-      </p>
-
-      {/* Error Message */}
-      {error && (
-        <div className="mb-4 text-red-500 text-center font-semibold">
-          {error}
+      {isGoogleSignup && googlePrefill?.photoURL && (
+        <div className="mb-4 flex items-center gap-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-3">
+          <img
+            src={googlePrefill.photoURL}
+            alt=""
+            className="h-12 w-12 rounded-full border border-white/20"
+          />
+          <div>
+            <p className="text-sm font-medium text-white">{googlePrefill.fullName}</p>
+            <p className="text-xs text-slate-400">{googlePrefill.email}</p>
+          </div>
         </div>
       )}
 
-      {/* Input Fields */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Full Name */}
-        <div>
-          <label
-            htmlFor="fullName"
-            className="block text-gray-700 text-sm font-semibold mb-2"
-          >
-            Full Name
-          </label>
-          <input
-            type="text"
-            id="fullName"
-            name="fullName"
-            value={formData.fullName}
-            onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            placeholder="Enter your Full Name"
-            required
-          />
-        </div>
+      <form onSubmit={handleRegister} className="space-y-4 max-w-md">
+        {error && <div className="auth-error">{error}</div>}
 
-        {/* Username */}
-        <div>
-          <label
-            htmlFor="username"
-            className="block text-gray-700 text-sm font-semibold mb-2"
-          >
-            Username
-          </label>
-          <input
-            type="text"
-            id="username"
-            name="username"
-            value={formData.username}
-            onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            placeholder="Enter your Username"
-            required
-          />
-        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <AuthField label="Full name" id="fullName">
+            {inputWithIcon(BiUser, {
+              type: "text",
+              id: "fullName",
+              name: "fullName",
+              value: formData.fullName,
+              onChange: handleChange,
+              placeholder: "Your full name",
+              required: true,
+              readOnly: isGoogleSignup,
+            })}
+          </AuthField>
 
-        {/* Email Address */}
-        <div>
-          <label
-            htmlFor="email"
-            className="block text-gray-700 text-sm font-semibold mb-2"
-          >
-            Email Address
-          </label>
-          <input
-            type="email"
-            id="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            placeholder="Enter your Email"
-            required
-          />
-        </div>
+          <AuthField label="Username" id="username" hint={isGoogleSignup ? "Optional — auto-generated if empty" : undefined}>
+            {inputWithIcon(BiIdCard, {
+              type: "text",
+              id: "username",
+              name: "username",
+              value: formData.username,
+              onChange: handleChange,
+              placeholder: "Choose a username",
+              required: !isGoogleSignup,
+            })}
+          </AuthField>
 
-        {/* Password */}
-        <div>
-          <label
-            htmlFor="password"
-            className="block text-gray-700 text-sm font-semibold mb-2"
-          >
-            Password
-          </label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            value={formData.password}
-            onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            placeholder="Enter your Password"
-            required
-          />
-        </div>
+          <AuthField label="Email" id="email">
+            {inputWithIcon(BiEnvelope, {
+              type: "email",
+              id: "email",
+              name: "email",
+              value: formData.email,
+              onChange: handleChange,
+              placeholder: "you@company.com",
+              required: true,
+              readOnly: isGoogleSignup,
+            })}
+          </AuthField>
 
-        {/* Department */}
-        <div>
-          <label
-            htmlFor="department"
-            className="block text-gray-700 text-sm font-semibold mb-2"
-          >
-            Department
-          </label>
-          <select
+          {!isGoogleSignup && (
+            <AuthField label="Password" id="password">
+              <div className="relative">
+                <BiLock className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-500" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="auth-input pl-11 pr-12"
+                  placeholder="Min. 8 characters"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 hover:bg-white/10"
+                >
+                  {showPassword ? <BiHide className="text-xl" /> : <BiShow className="text-xl" />}
+                </button>
+              </div>
+            </AuthField>
+          )}
+
+          <AuthField label="Role" id="role">
+            <div className="relative">
+              <BiUser className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-500" />
+              <select
+                id="role"
+                name="role"
+                value={formData.role}
+                onChange={handleChange}
+                className="auth-input pl-11"
+                required
+              >
+                <option value="">Select role</option>
+                {ROLES.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </AuthField>
+
+          <AuthField
+            label="Department"
             id="department"
-            name="department"
-            value={formData.department}
-            onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            required
+            hint={isMainAdmin ? "Not required for admin accounts" : undefined}
           >
-            <option value="">Select your Department</option>
-            <option value="Water">Water</option>
-            <option value="Gas">Gas</option>
-            <option value="Road Construction">Road Construction</option>
-          </select>
+            <div className="relative">
+              <BiBuilding className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-500" />
+              <select
+                id="department"
+                name="department"
+                value={formData.department}
+                onChange={handleChange}
+                disabled={isMainAdmin}
+                className="auth-input pl-11 disabled:cursor-not-allowed disabled:opacity-50"
+                required={!isMainAdmin}
+              >
+                <option value="">Select department</option>
+                {DEPARTMENTS.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </AuthField>
         </div>
 
-        {/* Register As */}
-        <div>
-          <label
-            htmlFor="role"
-            className="block text-gray-700 text-sm font-semibold mb-2"
-          >
-            Register As
-          </label>
-          <select
-            id="role"
-            name="role"
-            value={formData.role}
-            onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            required
-          >
-            <option value="">Select your Role</option>
-            <option value="Main Admin">Admin</option>
-            <option value="Officer">Officer</option>
-            <option value="Worker">Worker</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Submit Buttons */}
-      <div className="flex flex-col space-y-4">
-        <button
-          type="submit"
-          className="w-full bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400"
-          disabled={loading}
-        >
-          {loading ? "Creating Account..." : "Create Account"}
+        <button type="submit" disabled={busy} className="auth-btn-primary mt-2">
+          {loading ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="loading-spinner !h-5 !w-5 !border-2" />
+              {isGoogleSignup ? "Finishing..." : "Creating account..."}
+            </span>
+          ) : isGoogleSignup ? (
+            "Complete sign-up"
+          ) : (
+            "Create account"
+          )}
         </button>
-        <button
-          type="button"
-          onClick={() => navigate("/login")}
-          className="w-full bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400"
-        >
-          Already have an account? Login
-        </button>
-      </div>
-    </div>
-    {/* Right Section with Illustration */}
-    <div className="flex items-center justify-center bg-gray-100 p-5">
-      <img
-        src={photo}
-        alt="Register Illustration"
-        className="w-50 md:w-60"
-      />
-    </div>
-  </form>
-</div>
 
+        <button type="button" onClick={() => navigate("/login")} className="auth-btn-secondary">
+          Back to sign in
+        </button>
+      </form>
+    </AuthLayout>
   );
 };
 

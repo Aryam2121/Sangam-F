@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { FaComments, FaVideo, FaFilePdf, FaFileAlt, FaFileImage, FaCloudUploadAlt } from "react-icons/fa";
 import { useParams } from 'react-router-dom';
 import axios from "axios";
+import { buildApiUrl } from "../config/api";
 
 const ProjectDetails = () => {
 
@@ -57,16 +58,13 @@ const ProjectDetails = () => {
       setTaskError("");
       console.log(`Fetching tasks for project ID: ${projectId}`); // Add this log for debugging
 
-      console.log(import.meta.env.VITE_BACKEND, "backend url");
-      const response = await axios.get(
-        `https://${import.meta.env.VITE_BACKEND}/api/project/${projectId}/tasks`
-      );
+      const response = await axios.get(buildApiUrl(`/api/project/${projectId}/tasks`));
       console.log("Tasks fetched aryaman successfully:", response.data); // Log the fetched tasks
       setTasks(response.data);
     } catch (err) {
       console.log(err)
       console.error("Error fetching tasks:", err.response?.data || err.message);
-      setTaskError(err.response.data.error);
+      setTaskError(err.response?.data?.error || "Failed to fetch tasks.");
     } finally {
       setLoading(false);
     }
@@ -81,11 +79,11 @@ const ProjectDetails = () => {
     try {
       setLoading(true);
       setResError("");
-      const response = await axios.get(`https://${import.meta.env.VITE_BACKEND}/api/project/${projectId}/resources`);
+      const response = await axios.get(buildApiUrl(`/api/project/${projectId}/resources`));
       setResources(response.data);
       console.log(response.data, "hello vanshika")
     } catch (err) {
-      setResError(err.response.data.error);
+      setResError(err.response?.data?.error || "Failed to fetch resources.");
     } finally {
       setLoading(false);
     }
@@ -123,7 +121,7 @@ const ProjectDetails = () => {
     }
 
     try {
-      const response = await fetch(`https://${import.meta.env.VITE_BACKEND}/api/getReportByProjectId/${projectId}`);
+      const response = await fetch(buildApiUrl(`/api/getReportByProjectId/${projectId}`));
 
       if (!response.ok) {
         throw new Error('Failed to fetch reports');
@@ -180,7 +178,7 @@ const ProjectDetails = () => {
     const formData = new FormData();
     formData.append('report', file);
 
-    const url = `https://${import.meta.env.VITE_BACKEND}/api/uploadProjectReport/${projectId}`;
+    const url = buildApiUrl(`/api/uploadProjectReport/${projectId}`);
 
     try {
       const response = await fetch(url, {
@@ -268,7 +266,7 @@ const ProjectDetails = () => {
       }
 
       try {
-        const response = await fetch(`https://${import.meta.env.VITE_BACKEND}/api/getReportByProjectId/${projectId}`);
+        const response = await fetch(buildApiUrl(`/api/getReportByProjectId/${projectId}`));
 
         // Checking if the response is successful
         if (!response.ok) {

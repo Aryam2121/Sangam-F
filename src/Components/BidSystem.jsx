@@ -1,81 +1,90 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import { saveAs } from "file-saver";
-
-const initialBids = [
-  { id: 1, contractor: "ABC Constructions", resource: "JCB", price: 5000, expiresAt: new Date().getTime() + 300000, isExpired: false },
-  { id: 2, contractor: "XYZ Contractors", resource: "Cranes", price: 7000, expiresAt: new Date().getTime() + 600000, isExpired: false },
-  { id: 3, contractor: "LMN Builders", resource: "Excavator", price: 6500, expiresAt: new Date().getTime() + 900000, isExpired: false },
-];
+import toast from "react-hot-toast";
+import { createBid, deleteBid, fetchBids, updateBid } from "../services/sangamApi";
+import { useStaleResource } from "../hooks/useStaleResource";
 
 const BidSystem = () => {
-  const [bids, setBids] = useState(initialBids);
-  const [lowestBid, setLowestBid] = useState(null);
+  const {
+    data: bids = [],
+    setData: setBids,
+    loading,
+  } = useStaleResource({
+    key: "bids",
+    fetcher: fetchBids,
+    maxAgeMs: 45_000,
+    refreshMs: 60_000,
+    initialValue: [],
+  });
+  const [lowestBidId, setLowestBidId] = useState(null);
   const [search, setSearch] = useState("");
   const [newBid, setNewBid] = useState({ contractor: "", resource: "", price: "", expiresAt: "" });
   const [selectedBid, setSelectedBid] = useState(null);
   const [editBid, setEditBid] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-
-  const handleViewDetails = (bid) => {
-    setSelectedBid(bid); // Set the selected bid to the state
-  };
-
-  const handleCloseDetails = () => {
-    setSelectedBid(null); // Close the details view
-  };
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date().getTime();
-      setBids((prevBids) =>
-        prevBids.map((bid) => ({
-          ...bid,
-          isExpired: now > bid.expiresAt,
-        }))
-      );
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const withExpiry = useMemo(
+    () =>
+      bids.map((bid) => ({
+        ...bid,
+        isExpired: Date.now() > new Date(bid.expiresAt).getTime(),
+      })),
+    [bids]
+  );
 
   const findLowestBid = () => {
-    const validBids = bids.filter((bid) => !bid.isExpired);
+    const validBids = withExpiry.filter((bid) => !bid.isExpired);
+    if (!validBids.length) {
+      toast("No active bids available.", { icon: "ℹ️" });
+      setLowestBidId(null);
+      return;
+    }
     const lowest = validBids.reduce((prev, curr) => (prev.price < curr.price ? prev : curr), validBids[0]);
-    setLowestBid(lowest);
+    setLowestBidId(lowest._id);
   };
 
-  const handleAddBid = () => {
-    if (newBid.contractor && newBid.resource && newBid.price && newBid.expiresAt) {
-      setBids([
-        ...bids,
-        {
-          id: Date.now(),
-          contractor: newBid.contractor,
-          resource: newBid.resource,
-          price: Number(newBid.price),
-          expiresAt: new Date(newBid.expiresAt).getTime(),
-          isExpired: false,
-        },
-      ]);
+  const handleAddBid = async () => {
+    if (!newBid.contractor || !newBid.resource || !newBid.price || !newBid.expiresAt) {
+      toast.error("All fields are required");
+      return;
+    }
+    setSaving(true);
+    try {
+      const created = await createBid(newBid);
+      const bid = created?.bid || created?.data?.bid;
+      if (bid) setBids((prev) => [bid, ...prev]);
       setNewBid({ contractor: "", resource: "", price: "", expiresAt: "" });
+      toast.success("Bid added");
+    } catch (err) {
+      toast.error(err.message || "Failed to add bid");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDeleteBid = (id) => {
-    setBids(bids.filter((bid) => bid.id !== id));
+  const handleDeleteBid = async (id) => {
+    try {
+      await deleteBid(id);
+      setBids((prev) => prev.filter((bid) => bid._id !== id));
+      if (lowestBidId === id) setLowestBidId(null);
+      toast.success("Bid deleted");
+    } catch (err) {
+      toast.error(err.message || "Failed to delete bid");
+    }
   };
 
   const handleDownloadBids = () => {
     const csvContent = "data:text/csv;charset=utf-8," +
       bids
         .map((bid) =>
-          [bid.contractor, bid.resource, bid.price, new Date(bid.expiresAt).toLocaleString()].join(",")
+          [bid.contractor, bid.resource, bid.price, new Date(bid.expiresAt).toLocaleString(), bid.isExpired ? "Expired" : "Active"].join(",")
         )
         .join("\n");
     const blob = new Blob([csvContent], { type: "text/csv" });
     saveAs(blob, "bids.csv");
   };
 
-  const filteredBids = bids.filter(
+  const filteredBids = withExpiry.filter(
     (bid) =>
       bid.contractor.toLowerCase().includes(search.toLowerCase()) ||
       bid.resource.toLowerCase().includes(search.toLowerCase())
@@ -85,30 +94,52 @@ const BidSystem = () => {
     setEditBid(bid);
   };
 
-  const handleUpdateBid = () => {
-    setBids(bids.map((bid) => (bid.id === editBid.id ? { ...editBid } : bid)));
-    setEditBid(null);
+  const handleUpdateBid = async () => {
+    if (!editBid?._id) return;
+    setSaving(true);
+    try {
+      const updated = await updateBid(editBid._id, {
+        contractor: editBid.contractor,
+        resource: editBid.resource,
+        price: Number(editBid.price),
+        expiresAt: editBid.expiresAt,
+      });
+      const bid = updated?.bid || updated?.data?.bid;
+      if (bid) {
+        setBids((prev) => prev.map((item) => (item._id === bid._id ? bid : item)));
+      }
+      setEditBid(null);
+      toast.success("Bid updated");
+    } catch (err) {
+      toast.error(err.message || "Failed to update bid");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleBidSort = (criteria) => {
-    const sortedBids = [...bids].sort((a, b) => {
+    const sortedBids = [...withExpiry].sort((a, b) => {
       if (criteria === "price") return a.price - b.price;
-      if (criteria === "expiration") return a.expiresAt - b.expiresAt;
+      if (criteria === "expiration") return new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime();
       return a.contractor.localeCompare(b.contractor);
     });
     setBids(sortedBids);
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 p-6">
-      <h1 className="text-3xl font-bold mb-6">Advanced Bidding System</h1>
+    <div className="page pb-10">
+      <div className="page-section mb-6">
+        <p className="page-kicker">Procurement</p>
+        <h1 className="page-title mt-2">Advanced Bidding System</h1>
+        <p className="page-subtitle">Search, compare, and manage bids in one place.</p>
+      </div>
 
       {/* Search */}
       <div className="mb-6">
         <input
           type="text"
           placeholder="Search by contractor or resource"
-          className="w-full p-2 rounded-lg bg-gray-800 text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600"
+          className="field"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -118,19 +149,19 @@ const BidSystem = () => {
       <div className="mb-6 flex gap-4">
         <button
           onClick={() => handleBidSort("price")}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg"
+          className="btn"
         >
           Sort by Price
         </button>
         <button
           onClick={() => handleBidSort("expiration")}
-          className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg"
+          className="btn"
         >
           Sort by Expiry
         </button>
         <button
           onClick={() => handleBidSort("contractor")}
-          className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg"
+          className="btn"
         >
           Sort by Contractor
         </button>
@@ -138,11 +169,24 @@ const BidSystem = () => {
 
       {/* Bids Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {loading &&
+          [1, 2, 3].map((n) => (
+            <div key={n} className="glass-card p-4">
+              <div className="skeleton h-6 w-1/2" />
+              <div className="skeleton mt-3 h-4 w-3/4" />
+              <div className="skeleton mt-2 h-4 w-1/3" />
+              <div className="skeleton mt-2 h-4 w-2/3" />
+            </div>
+          ))}
         {filteredBids.map((bid) => (
           <div
-            key={bid.id}
-            className={`p-4 rounded-lg shadow-lg ${
-              bid.isExpired ? "bg-red-700" : lowestBid && lowestBid.id === bid.id ? "bg-green-700" : "bg-gray-800"
+            key={bid._id}
+            className={`glass-card p-4 ${
+              bid.isExpired
+                ? "ring-1 ring-red-400/30"
+                : lowestBidId && lowestBidId === bid._id
+                  ? "ring-1 ring-emerald-400/30"
+                  : ""
             }`}
           >
             <h2 className="text-xl font-semibold">{bid.resource}</h2>
@@ -156,72 +200,77 @@ const BidSystem = () => {
             <div className="mt-4 flex justify-between">
               <button
                 onClick={() => setSelectedBid(bid)}
-                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded-lg"
+                className="btn"
               >
                 View Details
               </button>
               <button
-                onClick={() => handleDeleteBid(bid.id)}
-                className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-lg"
+                onClick={() => handleDeleteBid(bid._id)}
+                className="btn btn-danger"
               >
                 Delete
               </button>
               <button
                 onClick={() => handleEditBid(bid)}
-                className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 rounded-lg"
+                className="btn"
               >
                 Edit
               </button>
             </div>
           </div>
         ))}
+        {!loading && filteredBids.length === 0 && (
+          <div className="glass-panel col-span-full p-8 text-center text-slate-400">
+            No bids found for current filter.
+          </div>
+        )}
       </div>
 
       {/* Actions */}
       <div className="mt-6 flex gap-4">
         <button
           onClick={findLowestBid}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg"
+          className="btn btn-primary"
         >
           Highlight Lowest Bid
         </button>
         <button
           onClick={handleDownloadBids}
-          className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg"
+          className="btn"
         >
           Download Bids
         </button>
       </div>
 
       {/* Add New Bid */}
-      <div className="mt-8 bg-gray-800 p-6 rounded-lg">
+      <div className="mt-8 page-section">
         <h2 className="text-2xl font-semibold mb-4">Add New Bid</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <input
             type="text"
             placeholder="Contractor Name"
-            className="p-2 rounded-lg bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600"
+            className="field"
             value={newBid.contractor}
             onChange={(e) => setNewBid({ ...newBid, contractor: e.target.value })}
           />
           <input
             type="text"
             placeholder="Resource Name"
-            className="p-2 rounded-lg bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600"
+            className="field"
             value={newBid.resource}
             onChange={(e) => setNewBid({ ...newBid, resource: e.target.value })}
           />
           <input
             type="number"
             placeholder="Price"
-            className="p-2 rounded-lg bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600"
+            className="field"
             value={newBid.price}
             onChange={(e) => setNewBid({ ...newBid, price: e.target.value })}
           />
           <input
             type="datetime-local"
             placeholder="Expiration Date"
-            className="p-2 rounded-lg bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600"
+            className="field"
             value={newBid.expiresAt}
             onChange={(e) => setNewBid({ ...newBid, expiresAt: e.target.value })}
           />
@@ -229,26 +278,27 @@ const BidSystem = () => {
         <div className="mt-4">
           <button
             onClick={handleAddBid}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg"
+            disabled={saving}
+            className="btn btn-primary"
           >
-            Add Bid
+            {saving ? "Saving..." : "Add Bid"}
           </button>
         </div>
       </div> {/* Show details of the selected bid */}
       {selectedBid && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-gray-800 p-6 rounded-lg w-1/3">
+          <div className="glass-panel w-[92vw] max-w-xl p-6">
             <h2 className="text-2xl font-semibold mb-4">Bid Details</h2>
             <div className="mb-4">
               <p><strong>Contractor:</strong> {selectedBid.contractor}</p>
               <p><strong>Resource:</strong> {selectedBid.resource}</p>
-              <p><strong>Price:</strong> ${selectedBid.price}</p>
+              <p><strong>Price:</strong> ₹{selectedBid.price}</p>
               <p><strong>Expires At:</strong> {new Date(selectedBid.expiresAt).toLocaleString()}</p>
             </div>
             <div className="flex justify-end">
               <button
                 onClick={handleCloseDetails}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg"
+                className="btn btn-danger"
               >
                 Close
               </button>
@@ -260,30 +310,30 @@ const BidSystem = () => {
       {/* Edit Bid Modal */}
       {editBid && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-gray-800 p-6 rounded-lg w-1/3">
+          <div className="glass-panel w-[92vw] max-w-3xl p-6">
             <h2 className="text-2xl font-semibold mb-4">Edit Bid</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <input
                 type="text"
-                className="p-2 rounded-lg bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="field"
                 value={editBid.contractor}
                 onChange={(e) => setEditBid({ ...editBid, contractor: e.target.value })}
               />
               <input
                 type="text"
-                className="p-2 rounded-lg bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="field"
                 value={editBid.resource}
                 onChange={(e) => setEditBid({ ...editBid, resource: e.target.value })}
               />
               <input
                 type="number"
-                className="p-2 rounded-lg bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="field"
                 value={editBid.price}
                 onChange={(e) => setEditBid({ ...editBid, price: e.target.value })}
               />
               <input
                 type="datetime-local"
-                className="p-2 rounded-lg bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="field"
                 value={new Date(editBid.expiresAt).toISOString().slice(0, 16)}
                 onChange={(e) => setEditBid({ ...editBid, expiresAt: e.target.value })}
               />
@@ -291,13 +341,14 @@ const BidSystem = () => {
             <div className="mt-4 flex justify-between">
               <button
                 onClick={handleUpdateBid}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg"
+                disabled={saving}
+                className="btn btn-primary"
               >
-                Save Changes
+                {saving ? "Saving..." : "Save Changes"}
               </button>
               <button
                 onClick={() => setEditBid(null)}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg"
+                className="btn"
               >
                 Cancel
               </button>

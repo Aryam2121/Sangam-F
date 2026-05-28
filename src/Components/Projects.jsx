@@ -6,143 +6,90 @@ import { motion } from "framer-motion";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { FaTasks, FaUser,FaCheckCircle,FaTimesCircle } from "react-icons/fa";
+import { buildApiUrl } from "../config/api";
 const COLORS = ["#0088FE", "#00C49F"];
 const role = localStorage.getItem('userRole');
 
+const asProjectList = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.projects)) return payload.projects;
+  if (Array.isArray(payload?.data?.projects)) return payload.data.projects;
+  return [];
+};
 
-const ProjectCard = ({ id, name, startDate, description, status, tasks = [], workers, onDelete, onEdit  }) => {
-  const completed = 50;
-  const getStatusStyles = (status) => {
-    switch (status.toLowerCase()) {
-      case "completed":
-        return { progressColor: "bg-gray-500", statusColor: "bg-green-800", text: "Completed" };
-      case "active":
-        return { progressColor: "bg-blue-500", statusColor: "bg-blue-800", text: "Active" };
-      case "inactive":
-        return { progressColor: "bg-red-500", statusColor: "bg-red-800", text: "Inactive" };
-      default:
-        return { progressColor: "bg-gray-500", statusColor: "bg-gray-800", text: "Unknown" };
-    }
+
+const ProjectCard = ({ id, name, startDate, description, status, tasks = [], workers = [], onDelete, onEdit }) => {
+  const normalized = (status || "").toString().toLowerCase();
+  const getStatusMeta = (s) => {
+    if (s === "completed") return { badge: "badge-completed", label: "Completed", pct: 100 };
+    if (s === "active") return { badge: "badge-active", label: "Active", pct: Math.floor(Math.random() * 30) + 55 };
+    if (s === "pending") return { badge: "badge-pending", label: "Pending", pct: Math.floor(Math.random() * 20) + 15 };
+    return { badge: "badge-active", label: s || "Unknown", pct: 0 };
   };
 
-  
-  const { progressColor, statusColor, text } = getStatusStyles(status);
-  const [showEditModal, setShowEditModal] = useState(false);// Example completion percentage, replace with real data if available
-  const data = [
-    { name: "Completed", value: completed },
-    { name: "Pending", value: 100 - completed },
-  ];
+  const { badge, label, pct } = getStatusMeta(normalized);
+  const [percent] = useState(pct);
   const navigate = useNavigate();
-  const handleCardClick = (projectId) => {
-    console.log('Navigating to project:', projectId);
-    navigate(`/project/${projectId}`);
-  };
+
   return (
     <motion.div
-    className="bg-gradient-to-r bg-gray-900 p-6 rounded-2xl shadow-2xl flex flex-col gap-6 group transform transition-all duration-500 ease-in-out relative overflow-hidden"
-    whileHover={{
-      scale: 1.05,
-      boxShadow: "0 20px 40px rgba(0, 0, 0, 0.3)",
-      backgroundPosition: "100% center",
-      transform: "perspective(800px) rotateY(10deg)",
-      backgroundColor: "#1e293b", // Darker shade on hover
-    }}
-    whileTap={{ scale: 0.95 }}
-    transition={{ type: "spring", stiffness: 300 }}
-    style={{
-      backgroundSize: "200% 200%",
-      transform: "perspective(800px) rotateY(0deg)",
-    }}
-    onClick={() => handleCardClick(id)} // Pass the 'id' as the argument
-  >
-    {/* Card Header with Glassmorphism Effect */}
-    <div className="flex justify-between items-center border-b border-gray-600 pb-3 relative z-10 bg-opacity-60 backdrop-blur-md rounded-lg">
-      <h3 className="font-semibold text-xl text-white group-hover:text-yellow-200 transition-all duration-300">{name}</h3>
-      <span className={`px-3 py-1 text-sm rounded-md ${statusColor}`}>{text}</span>
-    </div>
-
-
-    {/* Project Info with Soft Hover Animations */}
-    <p className="text-gray-300 text-sm hover:text-gray-200 transition-all duration-200">{`Start Date: ${new Date(startDate).toLocaleDateString()}`}</p>
-    {/*Showing Id*/}
-    <div className="flex items-center justify-between mb-4 text-gray-400">
-                  <span>
-                    <strong>Project Id:</strong>{" "}
-                    {(id)}
-                  </span>
-                </div>
-    <p className="text-gray-300 text-sm hover:text-gray-200 transition-all duration-200">{description}</p>
-
-
-     {/* Progress Bar */}
-     <div className="mt-4">
-  <div className="relative h-4 bg-gray-700 rounded-full overflow-hidden shadow-md">
-    {/* Colored Progress */}
-    <div
-      className={`h-full ${progressColor}`}
-      style={{
-        width: status === "Completed"
-          ? "100%"
-          : status === "Active"
-          ? `${Math.random() * (80 - 50) + 50}%`
-          : `${Math.random() * (30 - 10) + 10}%`,
-      }}
-    ></div>
-
-
-    {/* Dynamic Percentage */}
-    <div className="absolute inset-0 flex items-center justify-center text-sm text-white font-semibold">
-      {status === "Completed"
-        ? "100%"
-        : status === "Active"
-        ? `${Math.floor(Math.random() * (80 - 50) + 50)}%`
-        : `${Math.floor(Math.random() * (30 - 10) + 10)}%`}
-    </div>
-  </div>
- 
-    </div>
-
-
-    {/* Footer with Dynamic Task and Worker Stats */}
-    <div className="flex justify-between items-center gap-4 mt-4">
-      <div className="flex items-center gap-2">
-        <motion.div className="text-gray-400 group-hover:text-yellow-200 transition-all duration-300">
-          <FaTasks />
-        </motion.div>
-        <p className="text-gray-300 text-sm">{tasks.length} tasks</p>
+      className="glass-card group relative flex cursor-pointer flex-col overflow-hidden p-5"
+      whileHover={{ y: -4, scale: 1.01 }}
+      whileTap={{ scale: 0.99 }}
+      onClick={() => navigate(`/project/${id}`)}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-xl font-semibold text-white">{name}</h3>
+          <p className="mt-1 text-xs text-slate-400">Start Date: {new Date(startDate).toLocaleDateString()}</p>
+        </div>
+        <span className={`status-badge ${badge} shrink-0 shadow-sm`}>{label}</span>
       </div>
 
+      <p className="mt-3 text-xs text-slate-500">
+        <span className="font-semibold text-slate-400">Project ID:</span> {id}
+      </p>
 
-      <div className="flex items-center gap-2">
-        <motion.div className="text-gray-400 group-hover:text-yellow-200 transition-all duration-300">
-          <FaUser />
-        </motion.div>
-        <p className="text-gray-300 text-sm">{(workers || []).length} workers</p>
+      <p className="mt-3 line-clamp-3 min-h-[3.75rem] text-sm text-slate-300">{description}</p>
+
+      <div className="mt-4">
+        <div className="progress-track">
+          <div className="progress-fill bg-gradient-to-r from-cyan-400 to-blue-500" style={{ width: `${percent}%` }} />
+        </div>
+        <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+          <span>Progress</span>
+          <span>{percent}%</span>
+        </div>
       </div>
-     
-        {/* Edit and Delete Buttons */}
-        <div className="flex gap-2">
-        <motion.button
-  onClick={(e) => {
-    e.stopPropagation(); // Prevents the card click handler
-    onEdit(id);          // Trigger the edit handler
-  }}
-  className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-all duration-300"
->
-  Edit
-</motion.button>
 
-{(role === 'Main Admin') && (
-          <motion.button
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-4 text-sm text-slate-300">
+          <span className="inline-flex items-center gap-1.5"><FaTasks /> {tasks.length} tasks</span>
+          <span className="inline-flex items-center gap-1.5"><FaUser /> {workers.length} workers</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
             onClick={(e) => {
               e.stopPropagation();
-              toast.success("Project Deleted!");
-              onDelete(id);
+              onEdit(id);
             }}
-            className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-all duration-300"
+            className="btn btn-primary px-3 py-1.5 text-xs"
           >
-            Delete
-          </motion.button>)}
+            Edit
+          </button>
+          {role === "Main Admin" && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toast.success("Project Deleted!");
+                onDelete(id);
+              }}
+              className="btn btn-danger px-3 py-1.5 text-xs"
+            >
+              Delete
+            </button>
+          )}
         </div>
       </div>
     </motion.div>
@@ -152,6 +99,7 @@ const ProjectCard = ({ id, name, startDate, description, status, tasks = [], wor
 
 const Projects = () => {
   const [projects, setProjects] = useState([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredProjects, setFilteredProjects] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -184,8 +132,8 @@ const Projects = () => {
 
   useEffect(() => {
     setFilteredProjects(
-      projects.filter((project) =>
-        project.name.toLowerCase().includes(searchQuery.toLowerCase())
+      asProjectList(projects).filter((project) =>
+        (project?.name || "").toLowerCase().includes(searchQuery.toLowerCase())
       )
     );
   }, [searchQuery, projects]);
@@ -193,35 +141,37 @@ const Projects = () => {
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch(`https://${import.meta.env.VITE_BACKEND}/api/getallprojects`);
+      setProjectsLoading(true);
+      const response = await fetch(buildApiUrl('/api/getallprojects'));
       const data = await response.json();
-      setProjects(data);
+      setProjects(asProjectList(data));
     } catch (error) {
       toast.error("Failed to fetch projects");
+    } finally {
+      setProjectsLoading(false);
     }
   };
   const handleDeleteProject = (projectId) => {
     setProjects((prevProjects) =>
-        prevProjects.filter((project) => project.id !== projectId)
+      prevProjects.filter((project) => project._id !== projectId)
     );
 
-
-    fetch(`https://${import.meta.env.VITE_BACKEND}/api/projects/${projectId}`, {
-        method: 'DELETE',
+    fetch(buildApiUrl(`/api/project/${projectId}`), {
+      method: 'DELETE',
     })
-        .then((response) => {
-            if (!response.ok) {
-                throw new Error('Failed to delete the project');
-            }
-            console.log(`Project with ID ${projectId} deleted successfully`);
-        })
-        .catch((error) => {
-            console.error('Error deleting project:', error);
-        });
-};
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Failed to delete the project');
+        }
+        console.log(`Project with ID ${projectId} deleted successfully`);
+      })
+      .catch((error) => {
+        console.error('Error deleting project:', error);
+      });
+  };
   const createProject = async () => {
     try {
-      const response = await fetch(`https://${import.meta.env.VITE_BACKEND}/api/project`, {
+      const response = await fetch(buildApiUrl('/api/project'), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newProject),
@@ -258,6 +208,12 @@ const Projects = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const formatDepartments = (departments = []) =>
+    departments
+      .map((dept) => (typeof dept === "string" ? dept : dept?.name))
+      .filter(Boolean)
+      .join(", ");
+
 
   // Fetch the project details based on the project ID
   const fetchProject = async () => {
@@ -266,7 +222,7 @@ const Projects = () => {
       setLoading(true);
       setError(""); // Reset error before the new fetch
       const response = await axios.get(
-        `https://${import.meta.env.VITE_BACKEND}/api/getprojectbyid/${projectId}`
+        buildApiUrl(`/api/getprojectbyid/${projectId}`)
       );
       // Log the response data to check its structure
       console.log("Response data:", response.data);
@@ -300,7 +256,7 @@ const Projects = () => {
   const handleUpdateProject = async () => {
     try {
       const response = await fetch(
-        `https://${import.meta.env.VITE_BACKEND}/api/updateproject/${selectedProject._id}`,
+        buildApiUrl(`/api/updateproject/${selectedProject._id}`),
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -309,9 +265,10 @@ const Projects = () => {
       );
       if (response.ok) {
         const updatedData = await response.json();
+        const nextProject = updatedData?.updatedProject || updatedData;
         setProjects((prevProjects) =>
           prevProjects.map((project) =>
-            project._id === updatedData._id ? updatedData : project
+            project._id === nextProject._id ? nextProject : project
           )
         );
         toast.success("Project updated successfully!");
@@ -379,7 +336,7 @@ const Projects = () => {
 
 
     try {
-      const response = await fetch("http://sangam-c2fm.onrender.com/api/projectMLModel", {
+      const response = await fetch(buildApiUrl('/api/projectMLModel'), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -404,9 +361,12 @@ const Projects = () => {
  
   return (
    
-    <div className="p-6 bg-[#101114] min-h-screen text-white">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-semibold">Project Management</h2>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#111827,_#020617_60%)] px-6 py-10 text-white">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur">
+        <div>
+          <h2 className="text-3xl font-semibold">Project Management</h2>
+          <p className="mt-2 text-sm text-slate-300">Monitor progress, resources, and team allocation in real time.</p>
+        </div>
       {/* Search Bar for Projects */}
       <div className="flex items-center gap-2 w-full max-w-md">
           <input
@@ -414,7 +374,7 @@ const Projects = () => {
             placeholder="Search by Project ID"
             value={projectId}  // Use projectId here
             onChange={(e) => setProjectId(e.target.value)}  // Update projectId on change
-            className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md w-full"
+            className="w-full rounded-md border border-white/10 bg-slate-900/70 p-2 text-sm text-slate-200 focus:border-cyan-400 focus:outline-none"
           />
           <button
             className="bg-blue-500 text-white p-3 rounded-md hover:bg-blue-600"
@@ -434,7 +394,7 @@ const Projects = () => {
           <h3 className="text-xl font-semibold">Project Details</h3>
           <p><strong>Name:</strong> {projectData.name}</p>
           <p><strong>Description:</strong> {projectData.description}</p>
-          <p><strong>Departments:</strong> {projectData.departments.join(", ")}</p>
+          <p><strong>Departments:</strong> {formatDepartments(projectData.departments)}</p>
           <p><strong>Status:</strong> {projectData.status}</p>
           <p><strong>Workers:</strong> {projectData.workerIds.join(", ")}</p>
           {/* Render other project details as needed */}
@@ -448,7 +408,7 @@ const Projects = () => {
       {(role === 'Main Admin') && (
       <motion.button
         onClick={() => setShowModal(true)}
-        className="bg-green-500 text-white mb-4 px-4 py-2 rounded-md hover:bg-green-600 transition"
+        className="mb-4 rounded-md bg-emerald-500 px-4 py-2 text-white hover:bg-emerald-400 transition"
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
       >
@@ -457,7 +417,18 @@ const Projects = () => {
 
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProjects.length > 0 ? (
+        {projectsLoading ? (
+          [1, 2, 3, 4, 5, 6].map((item) => (
+            <div key={item} className="glass-card p-5">
+              <div className="skeleton h-6 w-2/3" />
+              <div className="skeleton mt-2 h-3 w-1/3" />
+              <div className="skeleton mt-4 h-4 w-full" />
+              <div className="skeleton mt-2 h-4 w-5/6" />
+              <div className="skeleton mt-4 h-2 w-full" />
+              <div className="skeleton mt-4 h-8 w-28" />
+            </div>
+          ))
+        ) : filteredProjects.length > 0 ? (
           filteredProjects.map((project) => (
             <ProjectCard
               key={project._id}
@@ -468,13 +439,13 @@ const Projects = () => {
               departments={project.departments}
               status={project.status}
               tasks={project.taskIds}
-              workers={project.workers}
+              workers={project.workerIds || []}
               onDelete={handleDeleteProject}
               onEdit={handleEditProject}
             />
           ))
         ) : (
-          <p>No projects available</p>
+          <p className="text-slate-300">No projects available</p>
         )}
       </div>
 
@@ -519,15 +490,15 @@ const Projects = () => {
             />
             <input
               type="text"
-              placeholder="Worker IDs (comma-separated)"
-              value={newProject.workerIds}
+              placeholder="Worker usernames (comma-separated)"
+              value={newProject.workerIds.join(", ")}
               onChange={(e) => setNewProject({ ...newProject, workerIds: e.target.value.split(",") })}
               className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
             />
             <input
               type="text"
               placeholder="Task IDs (comma-separated)"
-              value={newProject.taskIds}
+              value={newProject.taskIds.join(", ")}
               onChange={(e) => setNewProject({ ...newProject, taskIds: e.target.value.split(",") })}
               className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
             />
@@ -584,8 +555,8 @@ const Projects = () => {
         className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
       >
         <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-        <option value="Completed">Completed</option>
+        <option value="pending">Pending</option>
+        <option value="completed">Completed</option>
        
       </select> 
 

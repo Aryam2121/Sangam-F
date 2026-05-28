@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { message } from "antd";
+import { buildApiUrl } from "../config/api";
 
 const useSignup = () => {
   const { login } = useAuth();
@@ -19,7 +20,7 @@ const useSignup = () => {
     try {
       setLoading(true);
     
-      const res = await fetch(`https://${import.meta.env.VITE_BACKEND}/admin/register`, {
+      const res = await fetch(buildApiUrl('/admin/register'), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
@@ -40,7 +41,7 @@ const useSignup = () => {
     
         if (res.status === 201) {
           message.success(data.message);
-          login(data.token, data.user);
+          login(data.token, data.user, 24 * 60 * 60 * 1000);
         } else {
           setError(data.message || "Registration failed");
         }

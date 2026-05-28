@@ -1,7 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import Modal from "react-modal";
+import { BiPlus, BiSearch, BiRefresh } from "react-icons/bi";
 import { toast } from "react-toastify";
+import { buildApiUrl, getAuthHeaders } from "../config/api";
+import PageHeader from "./ui/PageHeader";
+import { deleteTask as apiDeleteTask, fetchTasks } from "../services/sangamApi";
+import { BiTrash } from "react-icons/bi";
+
 const customModalStyles = {
   content: {
     top: "50%",
@@ -18,29 +24,39 @@ const customModalStyles = {
     borderRadius: "10px",
     padding: "20px",
   },
+  overlay: {
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    zIndex: 10000,
+  },
 };
 
 const TaskManager = () => {
   const [file, setFile] = useState(null);
   const [message, setMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const [reportUrl, setReportUrl] = useState("");
   const [tasks, setTasks] = useState([]);
   const [searchTaskId, setSearchTaskId] = useState("");
+  const [filterText, setFilterText] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [assigneeFilter, setAssigneeFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [dueFromFilter, setDueFromFilter] = useState("");
+  const [dueToFilter, setDueToFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [newStatus, setNewStatus] = useState("Pending");
-
-  const [searchUserId, setSearchUserId] = useState("");
   const [taskReports, setTaskReports] = useState({});
-  const role = localStorage.getItem('userRole');
+  const [data, setData] = useState([]);
+  const [names, setNames] = useState([]);
+
+  const role = localStorage.getItem("userRole");
+
   const [newTask, setNewTask] = useState({
-    taskId: "",  // Add taskId here
+    taskId: "",
     title: "",
     description: "",
     assignedTo: "",
@@ -49,187 +65,164 @@ const TaskManager = () => {
     dueDate: "",
   });
 
-
-  // console.log(taskReports);
-  //demo data
-
-  const [data, setData] = useState([]);
-  const [selectedId, setSelectedId] = useState('');
-
-  // Fetch data and populate the state
   const fetchData = async () => {
     try {
-      const response = await fetch(`https://${import.meta.env.VITE_BACKEND}/admin/getalluser`);
+      const response = await fetch(buildApiUrl("/admin/getalluser"), {
+        headers: {
+          ...getAuthHeaders(),
+        },
+        credentials: "include",
+      });
       const jsonData = await response.json();
-      setData(jsonData); // Store full data for name-id mapping
-    } catch (error) {
-      console.error("Error fetching data:", error);
+      const users = Array.isArray(jsonData?.data) ? jsonData.data : jsonData;
+      setData(Array.isArray(users) ? users : []);
+    } catch (fetchError) {
+      console.error("Error fetching users:", fetchError);
     }
   };
 
-  // Fetch data when the component loads
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    console.log("Selected ID:", selectedId); // Log or handle the selected ID
-    // You can now send `selectedId` to your backend or process it as needed
-  };
-
-  // console.log(selectedId);
-
-
-
-
-  const [names, setNames] = useState([]);
-  const [selectedName, setSelectedName] = useState('');
-
-  // Fetch names and populate the state
   const fetchNames = async () => {
     try {
-      const response = await fetch(`https://${import.meta.env.VITE_BACKEND}/api/getallprojects`);
+      const response = await fetch(buildApiUrl("/api/getallprojects"));
       const jsonData = await response.json();
-      setNames(jsonData); // Store full data for name-id mapping
-    } catch (error) {
-      console.error("Error fetching data:", error);
+      setNames(Array.isArray(jsonData) ? jsonData : []);
+    } catch (fetchError) {
+      console.error("Error fetching projects:", fetchError);
     }
   };
 
-
-  // Fetch names when the component loads
-  useEffect(() => {
-    fetchNames();
-  }, []);
-
-
-
-  const openEditModal = (task) => {
-    setSelectedTask(task); // Set the task being edited
-    setNewStatus(task.status); // Set the current status of the task in the dropdown
-    setIsModalOpen(true); // Open the modal
-  };
-
-  // Function to handle updating the task's status
-  const updateTaskStatus = async () => {
-    if (!selectedTask) return; // If no task is selected, do nothing
-
-    try {
-      const updatedTask = { ...selectedTask, status: newStatus };
-      await axios.patch(
-        `https://${import.meta.env.VITE_BACKEND}/api/project/task/${selectedTask._id}`,
-        updatedTask
-      );
-      setIsStatusModalOpen(false); // Close the modal after updating
-      fetchAllTasks(); // Refresh tasks list
-    } catch (error) {
-      console.error("Error updating task:", error.message);
-    }
-  };
-
-  // Fetch all tasks
   const fetchAllTasks = async () => {
     try {
       setLoading(true);
       setError("");
-      const response = await axios.get(
-        `https://${import.meta.env.VITE_BACKEND}/api/getalltasks`
-      );
-      setTasks(response.data); // Assuming `data` contains the list of all tasks
+      const list = await fetchTasks({
+        status: statusFilter,
+        assignee: assigneeFilter,
+        department: departmentFilter,
+        dueFrom: dueFromFilter,
+        dueTo: dueToFilter,
+      });
+      setTasks(Array.isArray(list) ? list : []);
     } catch (err) {
-      console.error("Error fetching all tasks:", err.response?.data || err.message);
-      setError(err.response?.data?.message || "Failed to fetch all tasks.");
+      console.error("Error fetching all tasks:", err.message);
+      setError(err.message || "Failed to fetch all tasks.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Other API functions...
+  useEffect(() => {
+    fetchData();
+    fetchNames();
+    fetchAllTasks();
+  }, []);
+
+  useEffect(() => {
+    fetchAllTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, assigneeFilter, departmentFilter, dueFromFilter, dueToFilter]);
+
+  const displayedTasks = useMemo(() => {
+    const q = filterText.trim().toLowerCase();
+    if (!q) return tasks;
+    return tasks.filter((t) => {
+      const title = (t.title || "").toLowerCase();
+      const desc = (t.description || "").toLowerCase();
+      const id = (t._id || "").toLowerCase();
+      const status = (t.status || "").toLowerCase();
+      return title.includes(q) || desc.includes(q) || id.includes(q) || status.includes(q);
+    });
+  }, [tasks, filterText]);
+
   const fetchTaskById = async () => {
-    if (!searchTaskId.trim()) return;
+    if (!searchTaskId.trim()) {
+      toast.error("Enter a task ID");
+      return;
+    }
     try {
       setLoading(true);
       setError("");
-      const response = await axios.get(
-        `https://${import.meta.env.VITE_BACKEND}/api/project/getTaskById/${searchTaskId}`
-      );
-      setTasks([response.data.task]); // Assuming `task` is returned in the response
+      const response = await axios.get(buildApiUrl(`/api/project/getTaskById/${searchTaskId}`));
+      setTasks(response.data?.task ? [response.data.task] : []);
     } catch (err) {
       console.error("Error fetching task:", err.response?.data || err.message);
       setError(err.response?.data?.message || "Failed to fetch task by ID.");
+      setTasks([]);
     } finally {
       setLoading(false);
     }
   };
 
   const fetchTasksByProjectId = async () => {
-    if (!projectId.trim()) return;
+    if (!projectId.trim()) {
+      toast.error("Enter a project ID");
+      return;
+    }
     try {
       setLoading(true);
       setError("");
-      const response = await axios.get(
-        `https://${import.meta.env.VITE_BACKEND}/api/project/${projectId}/tasks`
-      );
-      setTasks(response.data);
+      const response = await axios.get(buildApiUrl(`/api/project/${projectId}/tasks`));
+      const list = Array.isArray(response.data) ? response.data : response.data?.tasks || [];
+      setTasks(list);
+      if (list.length === 0) {
+        toast("No tasks found for this project.", { icon: "ℹ️" });
+      }
     } catch (err) {
-      console.error("Error fetching tasks:", err.response?.data || err.message);
-      setError(err.response?.data?.message || "Failed to fetch tasks by project ID.");
+      console.error("Error fetching tasks by project:", err.response?.data || err.message);
+      setError(err.response?.data?.message || err.response?.data?.error || "Failed to fetch tasks by project ID.");
+      setTasks([]);
     } finally {
       setLoading(false);
     }
   };
 
-  async function fetchReportByTaskId(taskId) {
-    const apiUrl = `https://${import.meta.env.VITE_BACKEND}/api/getreportbytaskid/${taskId}`;
-    // console.log(taskId);
+  const fetchReportByTaskId = async (taskId) => {
     try {
-      // Fetch the data from the API
-      const response = await fetch(apiUrl);
-      // console.log(response);
-      // Check if the response is ok (status code 200-299)
+      const response = await fetch(buildApiUrl(`/api/getreportbytaskid/${taskId}`));
       if (!response.ok) {
         throw new Error(`Error: ${response.status} ${response.statusText}`);
       }
 
-      // Parse the JSON response
-      const data = await response.json();
-
-      // Extract and store the report URLs in the state
-      if (data.report && data.report.reportUrls) {
+      const reportData = await response.json();
+      const reportUrls = reportData?.report?.reportUrls;
+      if (Array.isArray(reportUrls)) {
         setTaskReports((prevReports) => ({
           ...prevReports,
-
-          [taskId]: data.report.reportUrls,
+          [taskId]: reportUrls,
         }));
       } else {
-        throw new Error("Invalid response structure or no report URLs found.");
+        setTaskReports((prevReports) => ({
+          ...prevReports,
+          [taskId]: [],
+        }));
       }
-    } catch (error) {
-      console.error("Failed to fetch report:", error);
+    } catch (fetchError) {
+      console.error("Failed to fetch report:", fetchError);
+      setMessage("Failed to fetch reports.");
     }
-  }
-
+  };
 
   const createTask = async () => {
     try {
       setLoading(true);
       setError("");
-      await axios.post(
-        `https://${import.meta.env.VITE_BACKEND}/api/project/task`,
-        newTask
-      );
+      await axios.post(buildApiUrl("/api/project/task"), {
+        ...newTask,
+        taskId: Number(newTask.taskId),
+      });
+
       setNewTask({
-        taskId: "",  // Reset taskId
+        taskId: "",
         title: "",
         description: "",
         assignedTo: "",
         project: "",
-        status: ['Pending', 'In Progress', 'Completed', 'Submitted'],
+        status: "Pending",
         dueDate: "",
       });
+
       setIsModalOpen(false);
-      if (projectId) fetchTasksByProjectId(); // Refresh tasks
+      fetchAllTasks();
     } catch (err) {
       console.error("Error creating task:", err.response?.data || err.message);
       setError(err.response?.data?.message || "Failed to create a new task.");
@@ -237,286 +230,371 @@ const TaskManager = () => {
       setLoading(false);
     }
   };
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile && selectedFile.type === "image/png") {
-      setFile(selectedFile);
-    } else {
-      setMessage("Please upload a PNG file.");
+
+  const updateTaskStatus = async () => {
+    if (!selectedTask) return;
+    try {
+      await axios.patch(buildApiUrl(`/api/project/task/${selectedTask._id}`), {
+        ...selectedTask,
+        status: newStatus,
+      });
+      setIsStatusModalOpen(false);
+      fetchAllTasks();
+    } catch (err) {
+      console.error("Error updating task:", err.response?.data || err.message);
+      setError(err.response?.data?.message || "Failed to update task.");
     }
   };
 
   const handleFileUpload = async (e, taskId) => {
+    e.preventDefault();
+
     if (!file || file.type !== "image/png") {
       setMessage("Please upload a valid PNG file.");
       return;
     }
-    e.preventDefault();
-  
+
     setIsUploading(true);
     setMessage("");
-  
+
     const formData = new FormData();
     formData.append("report", file);
-  
+
     try {
-      // Upload the report
-      const response = await axios.post(
-        `https://${import.meta.env.VITE_BACKEND}/api/uploadtaskreport/${taskId}`,
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        }
-      );
-  
-      if (response.data.report) {
+      const response = await axios.post(buildApiUrl(`/api/uploadtaskreport/${taskId}`), formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (response.data?.report) {
         toast.success("Report uploaded successfully!");
-  
-        // Update the task's status in the backend
-        await axios.patch(
-          `https://${import.meta.env.VITE_BACKEND}/api/project/task/${taskId}`,
-          { status: "Submitted" } // Ensure the backend handles this field
-        );
-  
+
+        await axios.patch(buildApiUrl(`/api/project/task/${taskId}`), {
+          status: "Submitted",
+        });
+
         setMessage("Report uploaded successfully and status updated!");
-        fetchAllTasks(); // Refresh tasks list to reflect the new status
+        fetchAllTasks();
       } else {
         setMessage("Error uploading report.");
       }
-    } catch (error) {
-      setMessage(`Error uploading file: ${error.message}`);
+    } catch (uploadError) {
+      setMessage(`Error uploading file: ${uploadError.message}`);
     } finally {
       setIsUploading(false);
     }
   };
-  
 
-  const fetchTasksByUserId = async () => {
-    if (!searchUserId.trim()) return;
+  const handleDeleteTask = async (taskId) => {
+    if (!window.confirm("Delete this task permanently?")) return;
     try {
-      setLoading(true);
-      setError("");
-      const response = await axios.get(
-        `http://${import.meta.env.VITE_BACKEND}/api/getalltasksbyuserid/${searchUserId}`
-      );
-      setTasks(response.data.tasks); // Update with fetched tasks
+      await apiDeleteTask(taskId);
+      toast.success("Task deleted");
+      setTasks((prev) => prev.filter((t) => t._id !== taskId));
     } catch (err) {
-      console.error("Error fetching tasks by user ID:", err.response?.data || err.message);
-      setError(err.response?.data?.message || "Failed to fetch tasks by user ID.");
-    } finally {
-      setLoading(false);
+      toast.error(err?.response?.data?.message || "Failed to delete task");
     }
   };
-  // console.log(task._id);
+
+  const getStatusStyles = (status) => {
+    switch (status) {
+      case "Completed":
+        return {
+          pill: "bg-emerald-400/15 text-emerald-200 border-emerald-400/20",
+          bar: "bg-emerald-400",
+          label: "Completed",
+          width: "100%",
+        };
+      case "In Progress":
+        return {
+          pill: "bg-amber-400/15 text-amber-200 border-amber-400/20",
+          bar: "bg-amber-400",
+          label: "In Progress",
+          width: "62%",
+        };
+      case "Submitted":
+        return {
+          pill: "bg-cyan-400/15 text-cyan-200 border-cyan-400/20",
+          bar: "bg-cyan-400",
+          label: "Submitted",
+          width: "82%",
+        };
+      default:
+        return {
+          pill: "bg-rose-400/15 text-rose-200 border-rose-400/20",
+          bar: "bg-rose-400",
+          label: status || "Pending",
+          width: "28%",
+        };
+    }
+  };
+
   return (
-    <div className="p-6 bg-[#101114] min-h-screen text-gray-100">
-      <h2 className="text-2xl font-semibold mb-6">Task Manager</h2>
+    <div className="page pb-10">
+      <PageHeader
+        kicker="Operations"
+        title="Task Manager"
+        subtitle="Track tasks, update statuses, and upload reports in one place."
+        actions={
+          (role === "Main Admin" || role === "Officer") && (
+            <button type="button" onClick={() => setIsModalOpen(true)} className="btn btn-primary">
+              <BiPlus className="text-lg" />
+              Add Task
+            </button>
+          )
+        }
+      />
 
-      {/* Search Section */}
-      <div className="flex flex-wrap gap-4 mb-6">
-        {/* Search by Task ID */}
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Search Task by Task ID"
-            value={searchTaskId}
-            onChange={(e) => setSearchTaskId(e.target.value)}
-            className="p-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
-          />
-          <button
-            onClick={fetchTaskById}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-          >
-            Search
-          </button>
+      {(error || message) && (
+        <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+          {error || message}
         </div>
+      )}
 
-        {/* Search by Project ID */}
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Search Tasks by Project ID"
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            className="p-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
-          />
-          <button
-            onClick={fetchTasksByProjectId}
-            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-          >
-            Search
-          </button>
+      <div className="glass-panel mb-6 min-w-0 overflow-hidden p-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-12 xl:items-end">
+          <div className="min-w-0 sm:col-span-2 xl:col-span-4">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Filter tasks
+            </label>
+            <input
+              type="search"
+              className="w-full min-w-0"
+              placeholder="Title, status, or ID..."
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+            />
+          </div>
+          <div className="min-w-0 xl:col-span-3">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Task ID lookup
+            </label>
+            <input
+              type="text"
+              className="w-full min-w-0"
+              placeholder="Exact task ID"
+              value={searchTaskId}
+              onChange={(e) => setSearchTaskId(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && fetchTaskById()}
+            />
+          </div>
+          <div className="min-w-0 xl:col-span-3">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Project ID
+            </label>
+            <input
+              type="text"
+              className="w-full min-w-0"
+              placeholder="Tasks for project"
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && fetchTasksByProjectId()}
+            />
+          </div>
+          <div className="min-w-0 xl:col-span-2">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Status</label>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full min-w-0">
+              <option value="">All statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Submitted">Submitted</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+          <div className="min-w-0 xl:col-span-2">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Assignee</label>
+            <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} className="w-full min-w-0">
+              <option value="">All assignees</option>
+              {(Array.isArray(data) ? data : []).map((item) => (
+                <option key={item._id} value={item._id}>
+                  {item.fullName || item.username}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="min-w-0 xl:col-span-2">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Department</label>
+            <input
+              type="text"
+              className="w-full min-w-0"
+              placeholder="e.g. Water"
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+            />
+          </div>
+          <div className="min-w-0 xl:col-span-2">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Due from</label>
+            <input type="date" className="w-full min-w-0" value={dueFromFilter} onChange={(e) => setDueFromFilter(e.target.value)} />
+          </div>
+          <div className="min-w-0 xl:col-span-2">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Due to</label>
+            <input type="date" className="w-full min-w-0" value={dueToFilter} onChange={(e) => setDueToFilter(e.target.value)} />
+          </div>
+          <div className="flex min-w-0 flex-wrap gap-2 sm:col-span-2 xl:col-span-2">
+            <button type="button" onClick={fetchTaskById} className="btn btn-primary min-w-[5.5rem] flex-1 sm:flex-none">
+              <BiSearch />
+              Find
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFilterText("");
+                setSearchTaskId("");
+                setProjectId("");
+                setStatusFilter("");
+                setAssigneeFilter("");
+                setDepartmentFilter("");
+                setDueFromFilter("");
+                setDueToFilter("");
+                fetchAllTasks();
+              }}
+              className="btn min-w-[5.5rem] flex-1 sm:flex-none"
+            >
+              <BiRefresh />
+            </button>
+          </div>
         </div>
-
-        {/* Search by User ID */}
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Search Tasks by User ID"
-            value={searchUserId}
-            onChange={(e) => setSearchUserId(e.target.value)}
-            className="p-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
-          />
-          <button
-            onClick={fetchTasksByUserId}
-            className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700"
-          >
-            Search
-          </button>
-        </div>
-
-        {/* Fetch All Tasks */}
-        <button
-          onClick={fetchAllTasks}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
-        >
-          Get All Tasks
-        </button>
       </div>
 
-      {/* Error Message */}
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-
-      {/* Tasks Display */}
-      {loading ? (
-        <p>Loading tasks...</p>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-          {Array.isArray(tasks) && tasks.length > 0 ? (
-            tasks.map((task) => (
+      <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        {loading ? (
+          <>
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="glass-card p-6">
+                <div className="skeleton h-6 w-1/2" />
+                <div className="skeleton mt-3 h-4 w-3/4" />
+                <div className="skeleton mt-6 h-16 w-full" />
+              </div>
+            ))}
+          </>
+        ) : displayedTasks.length > 0 ? (
+          displayedTasks.map((task) => {
+            const status = getStatusStyles(task.status);
+            return (
               <div
                 key={task._id}
-                className="relative group p-6 rounded-3xl shadow-xl transform hover:scale-105 bg-gray-900 border border-gray-700 text-gray-100 overflow-hidden"
+                className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg"
               >
-                {/* Glow Background */}
-                <div className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-gray-700 via-gray-700 to-gray-900 opacity-20 blur-xl group-hover:opacity-50 transition-all duration-500 -z-10"></div>
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-400 via-sky-500 to-fuchsia-500 opacity-80" />
 
-                {/* Status Badge */}
-                <span
-                  className={`absolute top-4 right-4 px-3 py-1 text-sm font-semibold rounded-full ${task.status === "Completed"
-                    ? "bg-green-500 text-gray-900"
-                    : task.status === "In Progress"
-                      ? "bg-yellow-500 text-gray-900"
-                      : "bg-red-500 text-gray-900"
-                    }`}
-                >
-                  {task.status}
-                </span>
+                <div className="relative z-10 flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-xs uppercase tracking-[0.32em] text-slate-400">Task</p>
+                    <h3 className="mt-2 text-2xl font-semibold leading-tight text-white">{task.title}</h3>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${status.pill}`}
+                  >
+                    {status.label}
+                  </span>
+                </div>
 
-                {/* Task Info */}
-                <h3 className="font-extrabold text-2xl bg-gradient-to-r from-white to-yellow-200 text-transparent bg-clip-text mb-4">
-                  {task.title}
-                </h3>
-                <p className="text-sm text-gray-300 mb-6">{task.description}</p>
+                <p className="relative z-10 mt-4 line-clamp-3 text-sm leading-6 text-slate-300">
+                  {task.description}
+                </p>
 
-                {/* Reports Section */}
-                {taskReports[task._id]?.length > 0 && (
-                  // console.log(taskReports[task._id]),
-                  <div className="mt-4">
-                    <h4 className="font-bold mb-2">Reports:</h4>
-                    <ul className="list-disc list-inside text-sm text-gray-300">
+                <div className="relative z-10 mt-5 grid grid-cols-1 gap-3 rounded-3xl border border-white/10 bg-white/5 p-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500">Due</p>
+                    <p className="mt-1 text-sm font-medium text-slate-100">
+                      {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "-"}
+                    </p>
+                  </div>
+                  <div className="sm:text-right">
+                    <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500">Task ID</p>
+                    <p className="mt-1 truncate text-sm font-medium text-slate-100">{task._id}</p>
+                  </div>
+                </div>
+
+                <div className="relative z-10 mt-5">
+                  <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.25em] text-slate-500">
+                    <span>Progress</span>
+                    <span>{status.label}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className={`h-full rounded-full ${status.bar} shadow-[0_0_16px_rgba(34,211,238,0.35)]`}
+                      style={{ width: status.width }}
+                    />
+                  </div>
+                </div>
+
+                {Array.isArray(taskReports[task._id]) && taskReports[task._id].length > 0 && (
+                  <div className="relative z-10 mt-5 rounded-3xl border border-white/10 bg-white/5 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h4 className="text-sm font-semibold text-white">Reports</h4>
+                      <span className="text-xs text-slate-400">{taskReports[task._id].length} files</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
                       {taskReports[task._id].map((url, index) => (
-                        <li key={index}>
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:underline"
-                          >
-                            Report {index + 1}
-                          </a>
-                        </li>
+                        <a
+                          key={url || index}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-xs font-medium text-cyan-100 transition hover:bg-cyan-400/20"
+                        >
+                          Report {index + 1}
+                        </a>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 )}
 
-                {/* Due Date */}
-                <div className="flex items-center justify-between mb-4 text-gray-400">
-                  <span>
-                    <strong>Due:</strong>{" "}
-                    {new Date(task.dueDate).toLocaleDateString()}
-                  </span>
-                </div>
-
-                {/*Showing Id*/}
-                <div className="flex items-center justify-between mb-4 text-gray-400">
-                  <span>
-                    <strong>Task Id:</strong>{" "}
-                    {(task._id)}
-                  </span>
-                </div>
-
-                {/* Progress Bar  */}
-                <div className="w-full bg-gray-600 rounded-full h-2 mb-4">
-                  <div
-                    className={`h-2 rounded-full ${task.status === "Completed" ? "bg-green-500" : task.status === "In Progress" ? "bg-yellow-500" : "bg-red-500"}`}
-                    style={{
-                      width: task.status === "Completed" ? "100%" :
-                        task.status === "In Progress" ? "50%" : "0%"
-                    }}
-                  ></div>
-                </div>
-                {
-
-                }
-
-                {/* Upload Section */}
-
-                <div className="mt-4">
-                  {(role === 'Worker') && (
+                <div className="mt-4 flex flex-wrap gap-3">
+                  {role === "Worker" && (
                     <>
-                      <h4 className="text-lg font-bold mb-2">Upload New Report:</h4>
                       <input
                         type="file"
                         accept=".png"
-                        required
                         onChange={(e) => setFile(e.target.files[0])}
-                        className="block w-full p-2 mb-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+                        className="block w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
                       />
                       <button
                         onClick={(e) => handleFileUpload(e, task._id)}
-                        onChange={(e) => setNewStatus("Submitted")}
-                        className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+                        disabled={isUploading}
+                        className="rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-60"
                       >
-                        Upload
+                        {isUploading ? "Uploading..." : "Upload"}
                       </button>
                     </>
                   )}
 
-                  {(role === 'Main Admin' || role === 'Officer') && (
-                  <button
-                    onClick={() => {
-                      setSelectedTask(task); // Pass the task details to the modal
-                      setIsStatusModalOpen(true); // Open the modal
-                    }}
-                    className="bg-yellow-600 text-white ml-6 px-4 py-2 rounded-md hover:bg-yellow-700"
-                  >
-                    Update Status
-                  </button>)}
-                  <button
-                    onClick={() => fetchReportByTaskId(task._id)}
-                    className="bg-blue-600 text-white ml-6 px-4 py-2 rounded-md hover:bg-blue-700"
-                  >
+                  {(role === "Main Admin" || role === "Officer") && (
+                    <button
+                      onClick={() => {
+                        setSelectedTask(task);
+                        setNewStatus(task.status || "Pending");
+                        setIsStatusModalOpen(true);
+                      }}
+                      className="rounded-md bg-yellow-600 px-4 py-2 text-white hover:bg-yellow-700"
+                    >
+                      Update Status
+                    </button>
+                  )}
+
+                  <button type="button" onClick={() => fetchReportByTaskId(task._id)} className="btn">
                     View Reports
                   </button>
+
+                  {role === "Main Admin" && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTask(task._id)}
+                      className="btn btn-danger"
+                    >
+                      <BiTrash /> Delete
+                    </button>
+                  )}
                 </div>
               </div>
-            ))
-          ) : (
-            <p className="text-gray-400">No tasks available.</p>
-          )}
-        </div>
-      )}
-
-      {/* Add Task Modal */}
-      {(role === 'Main Admin' || role === 'Officer') && (
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 mt-6"
-        >
-          Add Task
-        </button>)}
+            );
+          })
+        ) : (
+          <div className="glass-panel col-span-full p-12 text-center text-slate-400">
+            {filterText || searchTaskId || projectId ? "No tasks match your search." : "No tasks available."}
+          </div>
+        )}
+      </div>
 
       <Modal
         isOpen={isModalOpen}
@@ -524,21 +602,20 @@ const TaskManager = () => {
         style={customModalStyles}
         appElement={document.getElementById("root")}
       >
-        <h3 className="text-xl font-bold mb-4">Add New Task</h3>
+        <h3 className="mb-4 text-xl font-bold">Add New Task</h3>
         <form
           onSubmit={(e) => {
             e.preventDefault();
             createTask();
           }}
         >
-          {/* Add Task Fields */}
           <input
             type="text"
             placeholder="Task ID"
             value={newTask.taskId}
             onChange={(e) => setNewTask({ ...newTask, taskId: e.target.value })}
             required
-            className="w-full p-2 mb-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
           />
           <input
             type="text"
@@ -546,142 +623,107 @@ const TaskManager = () => {
             value={newTask.title}
             onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
             required
-            className="w-full p-2 mb-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
           />
           <textarea
             placeholder="Description"
             value={newTask.description}
             onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
             required
-            className="w-full p-2 mb-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
           />
-          {/* <select
-            id="username"
-            value={selectedId}
-            placeholder="Assigned To (User ID)"
-            onChange={(e) => setSelectedId({...newTask, assignedTo: e.target.value})}
-            className="w-full p-2 mb-4 bg-gray-700 border border-gray-600 rounded-md text-white"
-            
-          >
-            <option  disabled>
-              {data.length === 0 ? 'Loading...' : 'Assigned To (User ID)'}
-            </option>
-            {data.map((item) => (
-              <option className="text-white" key={item._id} value={item._id}>
-                {item.username}
-              </option>
-            ))}
-          </select> */}
+
           <select
             id="username"
-            value={newTask.assignedTo} // Use the value from `newTask`
-            placeholder="Assigned To (User ID)"
+            value={newTask.assignedTo}
             onChange={(e) => {
               const selectedValue = e.target.value;
-              setNewTask((prevTask) => ({
-                ...prevTask,
-                assignedTo: selectedValue, // Update the `assignedTo` field in `newTask`
-              }));
+              setNewTask((prevTask) => ({ ...prevTask, assignedTo: selectedValue }));
             }}
-            className="w-full p-2 mb-4 bg-gray-700 border border-gray-600 rounded-md text-white"
+            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-white"
           >
-            <option value="" enable>
-              {data.length === 0 ? 'Loading...' : 'Assigned To (User ID)'}
-            </option>
-            {data.map((item) => (
+            <option value="">{data.length === 0 ? "Loading..." : "Assigned To (User ID)"}</option>
+            {(Array.isArray(data) ? data : []).map((item) => (
               <option className="text-white" key={item._id} value={item._id}>
                 {item.username}
               </option>
             ))}
           </select>
 
-
-
           <select
-            id="name"
-            value={newTask.project} // Use the value from `newTask.project`
+            id="project"
+            value={newTask.project}
             onChange={(e) => {
               const selectedValue = e.target.value;
-              setNewTask((prevTask) => ({
-                ...prevTask,
-                project: selectedValue, // Update the `project` field in `newTask`
-              }));
+              setNewTask((prevTask) => ({ ...prevTask, project: selectedValue }));
             }}
-            className="w-full p-2 mb-4 bg-gray-700 border border-gray-600 rounded-md text-white"
+            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-white"
           >
-            <option enable value="">
-              {names.length === 0 ? 'Loading...' : 'Project ID'}
-            </option>
-            {names.map((item) => (
+            <option value="">{names.length === 0 ? "Loading..." : "Project ID"}</option>
+            {(Array.isArray(names) ? names : []).map((item) => (
               <option className="text-white" key={item._id} value={item._id}>
                 {item.name}
               </option>
             ))}
           </select>
 
-
           <select
             value={newTask.status}
             onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
-            className="w-full p-2 mb-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
           >
             <option value="Pending">Pending</option>
             <option value="In Progress">In Progress</option>
             <option value="Submitted">Submitted</option>
             <option value="Completed">Completed</option>
           </select>
+
           <input
             type="date"
             value={newTask.dueDate}
             onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
             required
-            className="w-full p-2 mb-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
           />
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-          >
+
+          <button type="submit" className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
             Add Task
           </button>
         </form>
       </Modal>
+
       <Modal
         isOpen={isStatusModalOpen}
         onRequestClose={() => setIsStatusModalOpen(false)}
         style={customModalStyles}
         appElement={document.getElementById("root")}
       >
-        <h3 className="text-xl font-bold mb-4">Update Task Status</h3>
+        <h3 className="mb-4 text-xl font-bold">Update Task Status</h3>
         {selectedTask && (
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              updateTaskStatus(selectedTask._id, newStatus);
+              updateTaskStatus();
             }}
           >
-            <h4 className="text-lg mb-2">Task: {selectedTask.title}</h4>
+            <h4 className="mb-2 text-lg">Task: {selectedTask.title}</h4>
             <select
               value={newStatus}
               onChange={(e) => setNewStatus(e.target.value)}
-              className="w-full p-2 mb-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+              className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
             >
               <option value="Pending">Pending</option>
               <option value="In Progress">In Progress</option>
               <option value="Submitted">Submitted</option>
               <option value="Completed">Completed</option>
             </select>
-            <button
-              type="submit"
-              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-            >
+            <button type="submit" className="rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700">
               Update
             </button>
           </form>
         )}
       </Modal>
-
     </div>
-
   );
 };
 

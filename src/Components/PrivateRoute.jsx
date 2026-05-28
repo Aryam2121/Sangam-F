@@ -1,10 +1,20 @@
 import React from "react";
 import { Navigate, Outlet } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import LoadingScreen from "./ui/LoadingScreen";
 
 const PrivateRoute = () => {
-  const token = localStorage.getItem("token");
+  const { isAuthenticated, isReady } = useAuth();
 
-  return token ? <Outlet /> : <Navigate to="/login" replace />;
+  if (!isReady) {
+    return <LoadingScreen label="Restoring your session..." />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Outlet />;
 };
 
 export default PrivateRoute;

@@ -1,32 +1,14 @@
-/* eslint-env serviceworker */
-/* global importScripts */
-/// <reference lib="webworker" />
+/* eslint-disable no-undef */
+importScripts("https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js");
 
-importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js");
-importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging.js");
+firebase.initializeApp({
+  apiKey: "AIzaSyCpnRUv4FOfRzZowThODavq6k5ymoiikxQ",
+  authDomain: "sangam-d1e5d.firebaseapp.com",
+  projectId: "sangam-d1e5d",
+  storageBucket: "sangam-d1e5d.firebasestorage.app",
+  messagingSenderId: "663528087925",
+  appId: "1:663528087925:web:d16678c31713dd451f333c",
+});
 
-const firebase = self.firebase;
-
-fetch("/firebase-config.json")
-  .then((response) => response.json())
-  .then((config) => {
-    firebase.initializeApp(config);
-
-    const messaging = firebase.messaging();
-
-    messaging.onBackgroundMessage((payload) => {
-      console.log(
-        "[firebase-messaging-sw.js] Received background message:",
-        payload
-      );
-
-      const notificationTitle = payload.notification?.title || "New Notification";
-      const notificationOptions = {
-        body: payload.notification?.body || "You have a new message!",
-        icon: payload.notification?.image || "/default-icon.png",
-      };
-
-      self.registration.showNotification(notificationTitle, notificationOptions);
-    });
-  })
-  .catch((error) => console.error("Failed to load Firebase config:", error));
+firebase.messaging();

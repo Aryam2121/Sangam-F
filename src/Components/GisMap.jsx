@@ -3,11 +3,16 @@ import { useParams } from "react-router-dom";
 import { MapContainer, TileLayer, Polyline, Marker } from "react-leaflet";
 import { Button, Container, Typography, Box, Card, CardContent } from "@mui/material";
 import { useEffect } from "react";
+import { buildApiUrl } from "../config/api";
 const postPathToBackend = async (projectId, path, timestamp, distance) => {
-  const apiUrl = `https://${import.meta.env.VITE_BACKEND}/api/path`;
+  const apiUrl = buildApiUrl('/api/path');
   const requestBody = {
-    projectId,
-    path,
+    _id: projectId,
+    totalpath: [
+      {
+        points: path.map(([lat, lng]) => ({ lat, lng })),
+      },
+    ],
     timestamp,
     distance,
   };
@@ -39,14 +44,14 @@ function GisMap() {
  // Fetch project path data from the API
  useEffect(() => {
   const fetchProjectPath = async () => {
-    const apiUrl = `https://${import.meta.env.VITE_BACKEND}/api/path/${projectId}`;
+    const apiUrl = buildApiUrl(`/api/getpathbyid/${projectId}`);
     try {
       const response = await fetch(apiUrl);
       if (!response.ok) {
         throw new Error(`Error: ${response.status}`);
       }
       const data = await response.json();
-      setPathData(data.path); // Set the fetched data
+      setPathData(data); // Set the fetched data
     } catch (error) {
       console.error("Failed to fetch project path:", error);
     }
@@ -66,7 +71,7 @@ fetchProjectPath();
       { enableHighAccuracy: true, distanceFilter: 1 }
     );
   };
-const stopTrackingAndSave = async () => {
+  const stopTrackingAndSave = async () => {
     const timestamp = new Date().toISOString();
     const distance = calculateDistance(currentPath);
     const savedData = await postPathToBackend(projectId, currentPath, timestamp, distance);
@@ -103,27 +108,12 @@ return (
       {pathData && (
         <Card sx={{ marginBottom: 4 }}>
           <CardContent>
-            <Typography variant="h5">{pathData.name}</Typography>
+            <Typography variant="h5">Project Path</Typography>
             <Typography variant="body1" color="textSecondary" paragraph>
-              {pathData.description}
+              {pathData.totalpath?.length || 0} saved paths
             </Typography>
             <Typography variant="body2">
-  <strong>Departments:</strong> {Array.isArray(pathData.departments) ? pathData.departments.join(", ") : "N/A"}
-</Typography>
-            <Typography variant="body2">
-              <strong>Resources:</strong> {pathData.resources}
-            </Typography>
-         <Typography variant="body2">
-  <strong>Workers:</strong> {Array.isArray(pathData.workerIds) ? pathData.workerIds.join(", ") : "N/A"}
-</Typography>
-            <Typography variant="body2">
-              <strong>Status:</strong> {pathData.status}
-            </Typography>
-            <Typography variant="body2">
-              <strong>Start Date:</strong> {new Date(pathData.startDate).toLocaleString()}
-            </Typography>
-            <Typography variant="body2">
-              <strong>End Date:</strong> {new Date(pathData.endDate).toLocaleString()}
+              <strong>Distance:</strong> {pathData.distance?.toFixed?.(2) || 0} KM
             </Typography>
           </CardContent>
         </Card>

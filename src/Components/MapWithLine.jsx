@@ -1,45 +1,41 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Circle, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { Navigate } from "react-router-dom";
-import { toast } from "react-toastify";
-import { useNavigate } from "react-router-dom"; // Import the hook
+import { useNavigate } from "react-router-dom";
+import { buildApiUrl } from "../config/api";
 
 
 const MapLine = () => {
-  const navigate = useNavigate(); // Initialize the hook
+  const navigate = useNavigate();
 
-  // const navigate = useNavigate();
-
-  // Define the two circles with their centers and radii
-  const circle1 = {
-    center: [41.0675, 28.804], // Center of first circle
-    radius: 1500, // Reduced radius in meters
-  };
+  const [circle1, setCircle1] = useState({
+    center: [41.0675, 28.804],
+    radius: 1500,
+  });
 
   const circle2 = {
-    center: [41.0575, 28.814], // Center of second circle
-    radius: 1500, // Reduced radius in meters
+    center: [41.0575, 28.814],
+    radius: 1500,
   };
 
-  const fetchCircle1Location = async () => {
-    try {
-      const response = await fetch(
-        `https://${import.meta.env.VITE_BACKEND}/api/getnewpath/67598e583e5e451ba95f8a42`
-      );
-      const data = await response.json();
-      // console.log("Data:", data.location1.lat);
-      if (data.location1 && data.location1.lat && data.location1.lng) {
-        setCircle1({
-          center: [data.location1.lat, data.location1.lng],
-          radius: 1500, // Radius in meters
-        });
+  useEffect(() => {
+    const fetchCircle1Location = async () => {
+      try {
+        const response = await fetch(buildApiUrl('/api/getnewpath/67598e583e5e451ba95f8a42'));
+        const data = await response.json();
+        if (data.location1?.lat && data.location1?.lng) {
+          setCircle1({
+            center: [data.location1.lat, data.location1.lng],
+            radius: 1500,
+          });
+        }
+      } catch (fetchError) {
+        console.error("Error fetching location 1:", fetchError);
       }
-    } catch (error) {
-      console.error("Error fetching location 1:", error);
-    }
-  };
-  fetchCircle1Location();
+    };
+
+    fetchCircle1Location();
+  }, []);
 
   // Function to calculate the distance between two coordinates (Haversine formula)
   const haversineDistance = (coords1, coords2) => {
@@ -177,7 +173,7 @@ export default MapLine;
 //   const fetchCircle1Location = async () => {
 //     try {
 //       const response = await fetch(
-//         "https://sangam-c2fm.onrender.com/api/getnewpath/67598e583e5e451ba95f8a42"
+//         "sangam-c2fm.onrender.com/api/getnewpath/67598e583e5e451ba95f8a42"
 //       );
 //       const data = await response.json();
 //       if (data.location1 && data.location1.lat && data.location1.lng) {
@@ -240,7 +236,7 @@ export default MapLine;
 //         >
 //           {/* Map Tiles */}
 //           <TileLayer
-//             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+//             url="{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
 //             attribution="&copy; OpenStreetMap contributors"
 //           />
 

@@ -7,6 +7,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { buildApiUrl } from "../config/api";
 
 
 // Register required components for ChartJS
@@ -68,7 +69,7 @@ const CostReductionPage = () => {
 
     try {
       const response = await axios.post(
-        `https://${import.meta.env.VITE_BACKEND_ML}/predict_cost_reduction`,
+        buildApiUrl('/predict_cost_reduction', import.meta.env.VITE_BACKEND_ML),
         {
           ...formData,
           task_priority: Number(formData.task_priority),
@@ -98,12 +99,14 @@ const CostReductionPage = () => {
 
 
   return (
-    <div className="min-h-screen bg-[#101114] text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Title */}
-        <h1 className="text-4xl font-extrabold mb-8 text-center">
-          Cost Reduction Dashboard
-        </h1>
+    <div className="page pb-10">
+      <div className="page-section mb-6">
+        <p className="page-kicker">Prediction</p>
+        <h1 className="page-title mt-2">Cost Reduction Dashboard</h1>
+        <p className="page-subtitle">Enter project signals to estimate optimization potential.</p>
+      </div>
+
+      <div className="mx-auto w-full max-w-7xl">
 
 
         {/* Form Section */}
@@ -120,7 +123,7 @@ const CostReductionPage = () => {
             ].map((item, index) => (
               <div
                 key={index}
-                className="flex justify-between items-center bg-gray-800 px-6 py-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300"
+                  className="glass-card flex items-center justify-between gap-4 px-6 py-4"
               >
                 <span className="text-gray-400 text-lg">{item.label}:</span>
                 <input
@@ -128,7 +131,7 @@ const CostReductionPage = () => {
                   name={item.name}
                   value={formData[item.name]}
                   onChange={handleChange}
-                  className="bg-gray-700 px-4 py-2 rounded font-semibold text-white focus:outline-none"
+                    className="field max-w-[18rem] text-right font-semibold"
                   required
                 />
               </div>
@@ -148,7 +151,7 @@ const CostReductionPage = () => {
             ].map((item, index) => (
               <div
                 key={index}
-                className="flex justify-between items-center bg-gray-800 px-6 py-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300"
+                className="glass-card flex items-center justify-between gap-4 px-6 py-4"
               >
                 <span className="text-gray-400 text-lg">{item.label}:</span>
                 <input
@@ -156,7 +159,7 @@ const CostReductionPage = () => {
                   name={item.name}
                   value={formData[item.name]}
                   onChange={handleChange}
-                  className="bg-gray-700 px-4 py-2 rounded font-semibold text-white focus:outline-none"
+                  className="field max-w-[18rem] text-right font-semibold"
                   required
                 />
               </div>
@@ -200,7 +203,7 @@ const CostReductionPage = () => {
         {/* Bottom Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Budget Status */}
-          <div className="bg-gray-800 p-10 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300">
+          <div className="glass-panel p-10">
             <h3 className="text-2xl font-bold mb-6 text-center">
               Project Budget Status
             </h3>
@@ -216,7 +219,7 @@ const CostReductionPage = () => {
 
 
           {/* Cost Optimization Potential */}
-          <div className="bg-gray-800 p-10 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300">
+          <div className="glass-panel p-10">
             <h3 className="text-2xl font-bold mb-6 text-center">
               Probability of Cost Optimization Potential
             </h3>

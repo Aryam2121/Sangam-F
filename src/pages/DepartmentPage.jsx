@@ -293,35 +293,46 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { motion } from "framer-motion";
 import axios from "axios";
-import { FaSearch, FaCheckCircle } from "react-icons/fa";
+import { FaSearch } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import DepartmentDetails from "../Components/DepartmentDetails";
+import { buildApiUrl } from "../config/api";
+import PageHeader from "../Components/ui/PageHeader";
+import {
+  fetchDepartments as apiFetchDepartments,
+  createDepartment as apiCreateDepartment,
+  updateDepartment as apiUpdateDepartment,
+  deleteDepartment as apiDeleteDepartment,
+} from "../services/sangamApi";
+import { BiEdit, BiTrash } from "react-icons/bi";
 
 
   
 
-  const DepartmentCard = ({ id, name, description }) => {
+  const DepartmentCard = ({ id, name, description, onEdit, onDelete }) => {
   const navigate = useNavigate();
-  const handleCardClick = () => {
-    console.log(id);
-    navigate(`/DepartmentDetails/`);
-  };
 
   return (
     <motion.div
-    onClick={handleCardClick}
-    className="bg-gradient-to-br from-gray-800 via-gray-900 to-gray-800 p-6 rounded-2xl shadow-lg flex flex-col gap-4 cursor-pointer group transform transition-all duration-500 ease-in-out relative overflow-hidden hover:shadow-xl"
-    whileHover={{
-      scale: 1.05,
-      boxShadow: "0 20px 40px rgba(0, 0, 0, 0.3)",
-    }}
-    whileTap={{ scale: 0.95 }}
-  >
-    <div className="flex justify-between items-center border-b border-gray-700 pb-3">
-      <h3 className="font-semibold text-xl text-white">{name}</h3>
-    </div>
-    <p className="text-gray-400">{description}</p>
-  </motion.div>
+      className="glass-card group relative flex flex-col gap-4 overflow-hidden p-6"
+      whileHover={{ scale: 1.02 }}
+    >
+      <button
+        type="button"
+        onClick={() => navigate("/departmentdetails", { state: { name, id } })}
+        className="flex flex-1 flex-col gap-3 text-left"
+      >
+        <h3 className="text-xl font-semibold text-white">{name}</h3>
+        <p className="text-sm text-slate-300 line-clamp-3">{description}</p>
+      </button>
+      <div className="flex gap-2 border-t border-white/10 pt-3">
+        <button type="button" onClick={() => onEdit({ _id: id, name, description })} className="btn flex-1 text-xs">
+          <BiEdit /> Edit
+        </button>
+        <button type="button" onClick={() => onDelete(id)} className="btn btn-danger px-3 text-xs">
+          <BiTrash />
+        </button>
+      </div>
+    </motion.div>
   );
 };
 
@@ -330,10 +341,9 @@ const DepartmentPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredDepartments, setFilteredDepartments] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [newDepartment, setNewDepartment] = useState({
-    name: "",
-    description: "",
-  });
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [newDepartment, setNewDepartment] = useState({ name: "", description: "" });
+  const [editDepartment, setEditDepartment] = useState({ _id: "", name: "", description: "" });
 
   // Fetch Departments
   useEffect(() => {
@@ -341,20 +351,22 @@ const DepartmentPage = () => {
   }, []);
 
   useEffect(() => {
+    const q = searchQuery.trim().toLowerCase();
     setFilteredDepartments(
-      departments.filter((department) =>
-        department.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      departments.filter((department) => {
+        if (!q) return true;
+        const name = (department.name || "").toLowerCase();
+        const desc = (department.description || "").toLowerCase();
+        return name.includes(q) || desc.includes(q);
+      })
     );
   }, [searchQuery, departments]);
 
   const fetchDepartments = async () => {
     try {
-      const response = await axios.get(
-        `https://${import.meta.env.VITE_BACKEND}/api/getalldep`
-      );
-      setDepartments(response.data);
-    } catch (error) {
+      const data = await apiFetchDepartments();
+      setDepartments(Array.isArray(data) ? data : []);
+    } catch {
       toast.error("Failed to fetch departments");
     }
   };
@@ -369,50 +381,68 @@ const DepartmentPage = () => {
       return;
     }
     try {
-      const response = await axios.post(
-        `https://${import.meta.env.VITE_BACKEND}/api/createDepartment`,
-        newDepartment
-      );
-      if (response.status === 200) {
-        fetchDepartments(); // Refresh the department list
-        toast.success("Department created successfully! 🎉", {
-          position: "top-right",
-          autoClose: 3000,
-          hideProgressBar: true,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-          theme: "dark",
-        });
-        setShowModal(false); // Close the modal
-        setNewDepartment({ name: "", description: "" }); // Reset form fields
-      }
-    } catch (error) {
-      toast.error("Failed to create department. Please try again.", {
-        position: "top-right",
-        autoClose: 3000,
-        hideProgressBar: true,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: "dark",
+      await apiCreateDepartment(newDepartment);
+      fetchDepartments();
+      toast.success("Department created successfully!");
+      setShowModal(false);
+      setNewDepartment({ name: "", description: "" });
+    } catch {
+      toast.error("Failed to create department.");
+    }
+  };
+
+  const handleEditDepartment = (dept) => {
+    setEditDepartment({ _id: dept._id, name: dept.name, description: dept.description });
+    setShowEditModal(true);
+  };
+
+  const saveEditDepartment = async () => {
+    if (!editDepartment.name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    try {
+      await apiUpdateDepartment(editDepartment._id, {
+        name: editDepartment.name,
+        description: editDepartment.description,
       });
+      fetchDepartments();
+      toast.success("Department updated");
+      setShowEditModal(false);
+    } catch {
+      toast.error("Failed to update department");
+    }
+  };
+
+  const handleDeleteDepartment = async (id) => {
+    if (!window.confirm("Delete this department?")) return;
+    try {
+      await apiDeleteDepartment(id);
+      fetchDepartments();
+      toast.success("Department deleted");
+    } catch {
+      toast.error("Failed to delete department");
     }
   };
   return (
-    <div className="p-6 bg-[#101114] min-h-screen text-white">
+    <div className="page pb-10 text-white">
       <ToastContainer />
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-semibold">Department Management</h2>
-        <motion.button
-          onClick={() => setShowModal(true)}
-          className="bg-gradient-to-r from-green-500 to-green-600 text-white px-5 py-2 rounded-md hover:shadow-lg transition-transform transform hover:scale-105"
-        >
-          Create New Department
-        </motion.button>
-      </div>
+      <PageHeader
+        kicker="Departments"
+        title="Department Management"
+        subtitle="Track teams, scopes, and active initiatives."
+        actions={
+          <motion.button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className="btn btn-primary"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            Create Department
+          </motion.button>
+        }
+      />
 
       {/* Search Bar */}
       <div className="relative mb-6">
@@ -421,7 +451,7 @@ const DepartmentPage = () => {
           placeholder="Search Departments"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full p-3 pl-10 bg-gray-800 text-white border border-gray-700 rounded-md"
+          className="w-full rounded-2xl border border-white/10 bg-slate-900/70 p-3 pl-10 text-white"
         />
         <FaSearch className="absolute top-1/2 left-3 transform -translate-y-1/2 text-gray-500" />
       </div>
@@ -431,21 +461,50 @@ const DepartmentPage = () => {
         {filteredDepartments.length > 0 ? (
           filteredDepartments.map((department) => (
             <DepartmentCard
-  key={department._id}
-  id={department._id} // Correct field: _id
-  name={department.name}
-  description={department.description}
-/>
+              key={department._id}
+              id={department._id}
+              name={department.name}
+              description={department.description}
+              onEdit={handleEditDepartment}
+              onDelete={handleDeleteDepartment}
+            />
           ))
         ) : (
-          <p className="text-gray-400">No departments available</p>
+          <div className="glass-panel col-span-full p-12 text-center text-slate-400">
+            No departments available. Create one to get started.
+          </div>
         )}
       </div>
 
-      {/* Create Department Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="glass-panel w-full max-w-lg p-6">
+            <h3 className="text-xl font-semibold mb-4">Edit Department</h3>
+            <input
+              type="text"
+              placeholder="Department Name"
+              value={editDepartment.name}
+              onChange={(e) => setEditDepartment({ ...editDepartment, name: e.target.value })}
+              className="w-full mb-4"
+            />
+            <textarea
+              placeholder="Description"
+              value={editDepartment.description}
+              onChange={(e) => setEditDepartment({ ...editDepartment, description: e.target.value })}
+              className="w-full mb-4"
+              rows={3}
+            />
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={saveEditDepartment} className="btn btn-primary">Save</button>
+              <button type="button" onClick={() => setShowEditModal(false)} className="btn">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-          <div className="bg-gray-900 p-6 rounded-lg w-full max-w-lg shadow-2xl">
+          <div className="glass-panel p-6 w-full max-w-lg shadow-2xl">
             <h3 className="text-xl font-semibold mb-4">Create New Department</h3>
             <input
               type="text"
@@ -454,7 +513,7 @@ const DepartmentPage = () => {
               onChange={(e) =>
                 setNewDepartment({ ...newDepartment, name: e.target.value })
               }
-              className="w-full p-3 bg-gray-800 text-white border border-gray-700 rounded-md mb-4"
+              className="w-full rounded-2xl border border-white/10 bg-slate-900/70 p-3 text-white mb-4"
             />
             <textarea
               placeholder="Description"
@@ -465,19 +524,13 @@ const DepartmentPage = () => {
                   description: e.target.value,
                 })
               }
-              className="w-full p-3 bg-gray-800 text-white border border-gray-700 rounded-md mb-4"
+              className="w-full rounded-2xl border border-white/10 bg-slate-900/70 p-3 text-white mb-4"
             />
             <div className="flex justify-end gap-4">
-              <button
-                onClick={createDepartment}
-                className="bg-blue-500 text-white px-5 py-2 rounded-md hover:bg-blue-600 transition-transform transform hover:scale-105"
-              >
+              <button type="button" onClick={createDepartment} className="btn btn-primary">
                 Create
               </button>
-              <button
-                onClick={() => setShowModal(false)}
-                className="bg-red-500 text-white px-5 py-2 rounded-md hover:bg-red-600 transition-transform transform hover:scale-105"
-              >
+              <button type="button" onClick={() => setShowModal(false)} className="btn">
                 Cancel
               </button>
             </div>

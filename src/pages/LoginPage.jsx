@@ -1,154 +1,226 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
-import { Typography, Form, Input, Button, Alert, Spin } from "antd";
-import photo from '../assets/photoforlogin.png';
-import toast, { Toaster } from 'react-hot-toast';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { BiEnvelope, BiLock, BiShow, BiHide } from "react-icons/bi";
+import photo from "../assets/photoforlogin.png";
+import toast from "react-hot-toast";
+import { useAuth } from "../context/AuthContext";
+import { buildApiUrl } from "../config/api";
+import { generateFcmToken, requestPasswordReset } from "../config/firebase";
+import AuthLayout, { AuthField, AuthLink } from "../Components/ui/AuthLayout";
+import GoogleSignInButton from "../Components/ui/GoogleSignInButton";
+import { useGoogleAuth } from "../hooks/useGoogleAuth";
+import { homePathForRole } from "../utils/authRedirect";
+import { completeAuthSession } from "../utils/completeAuthSession";
 
+const LoginPage = () => {
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const { signInWithGoogle, googleLoading } = useGoogleAuth();
+  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [showReset, setShowReset] = useState(false);
+  const [error, setError] = useState("");
 
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
-const LoginPage = ({ resource }) => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
 
-    // console.log(resource);
+    try {
+      const response = await fetch(buildApiUrl("/admin/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+        credentials: "include",
+      });
 
+      const data = await response.json().catch(() => null);
 
+      if (!response.ok) {
+        throw new Error(data?.message || "Incorrect email or password");
+      }
 
-    const [formData, setFormData] = useState({
-        name: '',
-        email: '',
-        password: '',
-    });
-    const navigate = useNavigate(); // React Router's hook for navigation
+      const user = data?.data?.user;
+      const accessToken = data?.data?.accessToken;
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData((prev) => ({
-            ...prev,
-            [name]: value,
-        }));
-    };
+      if (!user || !accessToken) {
+        throw new Error("Invalid login response");
+      }
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            const response = await fetch(`https://${import.meta.env.VITE_BACKEND}/admin/login`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(formData),
-            });
+      const fcmToken = await generateFcmToken().catch(() => null);
+      await completeAuthSession({ login, accessToken, user, fcmToken });
+      toast.success("Welcome back!");
+      navigate(homePathForRole(user.role));
+    } catch (error) {
+      setError(error.message || "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const handleForgotPassword = async () => {
+    const email = resetEmail.trim() || formData.email.trim();
+    if (!email) {
+      toast.error("Enter your email first");
+      setShowReset(true);
+      return;
+    }
+    try {
+      await requestPasswordReset(email);
+      toast.success("Password reset email sent — check your inbox");
+      setShowReset(false);
+    } catch (err) {
+      toast.error(
+        err?.message ||
+          "Could not send reset email. Use Google sign-in or contact your admin."
+      );
+    }
+  };
 
-            if (response.ok) {
-                const data = await response.json();
-                const uuser = data.data.user;
-                localStorage.setItem('userRole', uuser.role);
-                localStorage.setItem('token', data.token); // ✅ Store the token
-            
-                toast.success("Successfully Logged In...");
-            
-                setFormData({ name: '', email: '', password: '' });
-            
-                if (uuser.role === 'Officer') {
-                    navigate('/');
-                } else if (uuser.role === 'Main Admin') {
-                    navigate('/');
-                } else if (uuser.role === 'Worker') {
-                    navigate('/');
-                } else {
-                    alert('Unrecognized role');
-                }
-            
+  const busy = loading || googleLoading;
 
-            } else {
-                toast('Incorrect username or password.');
-            }
-        } catch (error) {
-            console.error('Error submitting form:', error);
-            toast('An error occurred. Please try again.');
-        }
-    };
+  return (
+    <AuthLayout
+      title="Welcome back"
+      kicker="Sign in to Sangam"
+      subtitle="Sign in with Google or your email to manage infrastructure projects."
+      image={photo}
+      imageAlt="Login illustration"
+      footer={
+        <p className="text-center text-sm text-slate-400">
+          Don&apos;t have an account?{" "}
+          <AuthLink to="/register">Create an account</AuthLink>
+        </p>
+      }
+    >
+      {error && (
+        <div className="auth-error mb-4" role="alert">
+          {error}
+        </div>
+      )}
 
-    return (
-        <div className="flex items-center justify-center min-h-screen bg-gradient-to-r from-gray-900 via-gray-800 to-black">
-            <form
-                onSubmit={handleSubmit}
-                className="flex flex-col md:flex-row bg-white shadow-lg rounded-lg overflow-hidden w-full max-w-4xl"
+      <GoogleSignInButton onClick={signInWithGoogle} disabled={busy} />
+
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-white/10" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase tracking-wider">
+          <span className="bg-slate-950 px-3 text-slate-500">or email</span>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-5 max-w-md">
+        <AuthField label="Email address" id="email">
+          <div className="relative">
+            <BiEnvelope className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-500" />
+            <input
+              type="email"
+              id="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              className="auth-input pl-11"
+              placeholder="you@company.com"
+              autoComplete="email"
+              required
+            />
+          </div>
+        </AuthField>
+
+        <AuthField label="Password" id="password">
+          <div className="relative">
+            <BiLock className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-500" />
+            <input
+              type={showPassword ? "text" : "password"}
+              id="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              className="auth-input pl-11 pr-12"
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-slate-200"
+              aria-label={showPassword ? "Hide password" : "Show password"}
             >
-                {/* Left Section with Image */}
+              {showPassword ? <BiHide className="text-xl" /> : <BiShow className="text-xl" />}
+            </button>
+          </div>
+        </AuthField>
 
-
-                {/* Right Section with Inputs */}
-                <div className="flex flex-col flex-1 p-10 space-y-6">
-                    <h2 className="text-2xl font-bold text-gray-800 text-center">Welcome Back</h2>
-                    <p className="text-center text-gray-600">Please login to your account</p>
-                    <div className="space-y-4">
-                        <div>
-                            <label
-                                htmlFor="email"
-                                className="block text-gray-700 text-sm font-semibold mb-2"
-                            >
-                                Email Address
-                            </label>
-                            <input
-                                type="email"
-                                id="email"
-                                name="email"
-                                value={formData.email}
-                                onChange={handleChange}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                                placeholder="Enter your email"
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label
-                                htmlFor="password"
-                                className="block text-gray-700 text-sm font-semibold mb-2"
-                            >
-                                Password
-                            </label>
-                            <input
-                                type="password"
-                                id="password"
-                                name="password"
-                                value={formData.password}
-                                onChange={handleChange}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                                placeholder="Enter your password"
-                                required
-                            />
-                        </div>
-                    </div>
-                    <button
-                        type="submit"
-                        className="w-full bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400"
-                    >
-                        Login
-                    </button>
-                    <div className="text-center">
-                        <p className="text-gray-600">Don't have an account?</p>
-                        <button
-                            type="button"
-                            onClick={() => navigate('/register')}
-                            className="mt-2 text-blue-600 font-semibold hover:underline focus:outline-none"
-                        >
-                            Create New Account
-                        </button>
-                    </div>
-                </div>
-                <div className="flex items-center justify-center bg-gray-100 p-5">
-                    <img
-                        src={photo}
-                        alt="Login Illustration"
-                        className="w-40 md:w-60"
-                    />
-                </div>
-            </form>
+        <div className="flex items-center justify-between text-sm">
+          <label className="flex cursor-pointer items-center gap-2 text-slate-400">
+            <input
+              type="checkbox"
+              className="rounded border-white/20 bg-slate-900 text-cyan-500 focus:ring-cyan-500/30"
+            />
+            Remember me
+          </label>
+          <button
+            type="button"
+            className="text-cyan-300 transition hover:text-cyan-200"
+            onClick={() => setShowReset((v) => !v)}
+          >
+            Forgot password?
+          </button>
         </div>
 
-    );
+        {showReset && (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="mb-2 text-xs text-slate-400">
+              We&apos;ll email a reset link (Firebase). Google users can use &quot;Continue with Google&quot;.
+            </p>
+            <input
+              type="email"
+              placeholder="your@email.com"
+              value={resetEmail}
+              onChange={(e) => setResetEmail(e.target.value)}
+              className="auth-input mb-3"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowReset(false)}
+                className="btn flex-1 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="btn btn-primary flex-1 text-sm"
+              >
+                Send reset link
+              </button>
+            </div>
+          </div>
+        )}
+
+        <button type="submit" disabled={busy} className="auth-btn-primary">
+          {loading ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="loading-spinner !h-5 !w-5 !border-2" />
+              Signing in...
+            </span>
+          ) : (
+            "Sign in"
+          )}
+        </button>
+      </form>
+    </AuthLayout>
+  );
 };
 
 export default LoginPage;

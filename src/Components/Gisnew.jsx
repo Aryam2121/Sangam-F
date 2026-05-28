@@ -1,231 +1,228 @@
-import  { useState, useEffect } from "react";
-import { MapContainer, TileLayer, Polyline, Marker, Popup } from "react-leaflet";
+import { useMemo, useState, useEffect } from "react";
+import { MapContainer, TileLayer, Polyline, Marker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-
-
-const paths = [
-  {
-    name: "Path 1",
-    coordinates: [
-      [37.7749, -122.4194],
-      [37.77595, -122.4215],
-    ],
-    length: 0.47, // Length in KM
-  },
-  {
-    name: "Path 2",
-    coordinates: [
-      [37.7749, -122.4194],
-      [37.7735, -122.4180],
-      [37.7725, -122.4175],
-    ],
-    length: 0.5,
-  },
-  {
-    name: "Path 3",
-    coordinates: [
-      [37.7749, -122.4194],
-      [37.7730, -122.4170],
-      [37.7720, -122.4160],
-    ],
-    length: 0.6,
-  },
-];
-
+import { buildApiUrl } from "../config/api";
 
 const Gis = () => {
-  const [currentLocation, setCurrentLocation] = useState(null);
-  const [hoverInfo, setHoverInfo] = useState(null);
-  const [selectedPathIndex, setSelectedPathIndex] = useState(0); // Selected path
-  const [completedDistance, setCompletedDistance] = useState(0); // Completed distance
-  const [totalDistance, setTotalDistance] = useState(paths[0].length); // Total distance of selected path
+  const [projects, setProjects] = useState([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [paths, setPaths] = useState([]);
+  const [completedPaths, setCompletedPaths] = useState([]);
+  const [selectedPathId, setSelectedPathId] = useState("");
+  const [totalDistance, setTotalDistance] = useState(0);
+  const [completedDistance, setCompletedDistance] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
+  const calculateDistance = (points = []) => {
+    if (points.length < 2) return 0;
+    let total = 0;
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const { lat: lat1, lng: lon1 } = points[i];
+      const { lat: lat2, lng: lon2 } = points[i + 1];
+      const R = 6371;
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) *
+          Math.cos((lat2 * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      total += R * c;
+    }
+    return total;
+  };
+
+  const selectedPath = useMemo(
+    () => paths.find((path) => path._id === selectedPathId) || paths[0],
+    [paths, selectedPathId]
+  );
+
+  const selectedCompletedPath = useMemo(
+    () => completedPaths.find((path) => path._id === selectedPath?._id) || completedPaths[0],
+    [completedPaths, selectedPath]
+  );
 
   useEffect(() => {
-    setCurrentLocation([37.775, -122.4196]); // Example current location
+    const loadProjects = async () => {
+      try {
+        const response = await fetch(buildApiUrl('/api/getallprojects'));
+        const data = await response.json();
+        setProjects(Array.isArray(data) ? data : []);
+        setSelectedProjectId(data?.[0]?._id || "");
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load projects.");
+      }
+    };
+
+    loadProjects();
   }, []);
 
+  useEffect(() => {
+    if (!selectedProjectId) return;
+    const loadPaths = async () => {
+      try {
+        setIsLoading(true);
+        setError("");
 
-  const handleMouseOver = (projectId, conflict) => {
-    setHoverInfo({ projectId, conflict });
-  };
+        const [totalResponse, completedResponse] = await Promise.all([
+          fetch(buildApiUrl(`/api/getpathbyid/${selectedProjectId}`)),
+          fetch(buildApiUrl(`/api/getcompletedpathbyid/${selectedProjectId}`)),
+        ]);
 
+        const totalData = totalResponse.ok ? await totalResponse.json() : null;
+        const completedData = completedResponse.ok ? await completedResponse.json() : null;
 
-  const handleMouseOut = () => {
-    setHoverInfo(null);
-  };
+        const totalPaths = totalData?.totalpath || [];
+        const completed = completedData?.completedPath || [];
 
+        setPaths(totalPaths);
+        setCompletedPaths(completed);
+        setSelectedPathId(totalPaths?.[0]?._id || "");
 
-  const handleIncrease = () => {
-    if (completedDistance < totalDistance) {
-      setCompletedDistance(prev => Math.min(prev + 0.05, totalDistance)); // Increase by 0.05 km
-    }
-  };
+        const nextTotalDistance = totalData?.distance || calculateDistance(totalPaths?.[0]?.points || []);
+        const nextCompletedDistance = completedData?.distance || calculateDistance(completed?.[0]?.points || []);
 
+        setTotalDistance(nextTotalDistance || 0);
+        setCompletedDistance(nextCompletedDistance || 0);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load path data.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const handleDecrease = () => {
-    if (completedDistance > 0) {
-      setCompletedDistance(prev => Math.max(prev - 0.05, 0)); // Decrease by 0.05 km
-    }
-  };
+    loadPaths();
+  }, [selectedProjectId]);
 
+  useEffect(() => {
+    if (!selectedPath) return;
+    const nextTotalDistance = calculateDistance(selectedPath.points || []);
+    const nextCompletedDistance = calculateDistance(selectedCompletedPath?.points || []);
+    setTotalDistance(nextTotalDistance || 0);
+    setCompletedDistance(nextCompletedDistance || 0);
+  }, [selectedPath, selectedCompletedPath]);
 
-  const calculateProgress = () => {
-    return (completedDistance / totalDistance) * 100;
-  };
-
-
-  const handlePathChange = (e) => {
-    const selectedIndex = e.target.value;
-    setSelectedPathIndex(selectedIndex);
-    setCompletedDistance(0); // Reset completed distance when path changes
-    setTotalDistance(paths[selectedIndex].length);
-  };
-
+  const progress = totalDistance ? (completedDistance / totalDistance) * 100 : 0;
+  const mapCenter = selectedPath?.points?.[0]
+    ? [selectedPath.points[0].lat, selectedPath.points[0].lng]
+    : [28.6139, 77.209];
 
   return (
-    <div className="h-screen w-full bg-gray-900 text-white flex flex-col">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-indigo-500 to-purple-500 p-6 text-center text-3xl font-bold shadow-md">
-        Navigate Path
-      </header>
-
-
-      {/* Path Selection Dropdown */}
-      <div className="flex justify-center p-6 bg-gray-800">
-        <select
-          className="bg-gray-900 text-white p-2 rounded-lg"
-          onChange={handlePathChange}
-          value={selectedPathIndex}
-        >
-          {paths.map((path, index) => (
-            <option key={index} value={index}>
-              {path.name}
-            </option>
-          ))}
-        </select>
+    <div className="page pb-10">
+      <div className="glass-panel mb-8 flex flex-wrap items-center justify-between gap-4 p-6">
+        <div>
+          <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Geo Tracking</p>
+          <h2 className="mt-2 text-3xl font-semibold">Path Monitoring</h2>
+          <p className="mt-2 text-sm text-slate-300">Track live project progress by mapped routes.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            className="min-w-[220px]"
+            value={selectedProjectId}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
+          >
+            {projects.map((project) => (
+              <option key={project._id} value={project._id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+          <select
+            className="min-w-[160px]"
+            value={selectedPathId}
+            onChange={(e) => setSelectedPathId(e.target.value)}
+          >
+            {paths.map((path, index) => (
+              <option key={path._id} value={path._id}>
+                Path {index + 1}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
+      {error && (
+        <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+          {error}
+        </div>
+      )}
 
-      {/* Progress Section */}
-      <div className="flex flex-wrap justify-center gap-6 p-6 bg-gray-800">
-        <div className="flex flex-col items-center bg-gray-900 p-4 rounded-lg shadow-md w-72">
-          <h3 className="text-lg font-bold text-purple-400">Project Progress</h3>
-          <div className="relative w-24 h-24 mt-4">
-            <svg className="w-full h-full" viewBox="0 0 36 36">
-              <path
-                className="text-gray-700"
-                strokeWidth="3"
-                stroke="currentColor"
-                fill="none"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-              />
-              <path
-                className="text-purple-500"
-                strokeWidth="3"
-                strokeDasharray={`${(calculateProgress() * 31.831) / 100}, 31.831`}
-                stroke="currentColor"
-                fill="none"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-xl font-bold">{Math.round(calculateProgress())}%</span>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+        <div className="glass-card p-6">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Progress</p>
+          <div className="mt-4 flex items-center justify-center">
+            <div className="relative h-24 w-24">
+              <svg className="h-full w-full" viewBox="0 0 36 36">
+                <path
+                  className="text-slate-700"
+                  strokeWidth="3"
+                  stroke="currentColor"
+                  fill="none"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  className="text-cyan-400"
+                  strokeWidth="3"
+                  strokeDasharray={`${(progress * 31.831) / 100}, 31.831`}
+                  stroke="currentColor"
+                  fill="none"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center text-lg font-semibold">
+                {Math.round(progress)}%
+              </div>
             </div>
           </div>
         </div>
-        <div className="bg-gray-900 p-4 rounded-lg shadow-md w-72 hover:scale-105 transition-transform">
-          <h3 className="text-lg font-bold text-green-400">Completed</h3>
-          <p className="mt-2 text-6xl">{completedDistance.toFixed(2)} KM</p>
-          <button onClick={handleIncrease} className="bg-green-500 text-white p-2 mt-4 rounded">Increase</button>
-          <button onClick={handleDecrease} className="bg-red-500 text-white p-2 mt-4 rounded">Decrease</button>
+        <div className="glass-card p-6">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Completed</p>
+          <p className="mt-4 text-3xl font-semibold">{completedDistance.toFixed(2)} KM</p>
         </div>
-        <div className="bg-gray-900 p-4 rounded-lg shadow-md w-72 hover:scale-105 transition-transform">
-          <h3 className="text-lg font-bold text-blue-400">Total Path</h3>
-          <p className="mt-2 text-6xl">{totalDistance} KM</p>
+        <div className="glass-card p-6">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Total Path</p>
+          <p className="mt-4 text-3xl font-semibold">{totalDistance.toFixed(2)} KM</p>
         </div>
-        <div className="bg-gray-900 p-4 rounded-lg shadow-md w-72 hover:scale-105 transition-transform">
-          <h3 className="text-lg font-bold text-orange-400">Remaining</h3>
-          <p className="mt-2 text-6xl">{(totalDistance - completedDistance).toFixed(2)} KM</p>
+        <div className="glass-card p-6">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Remaining</p>
+          <p className="mt-4 text-3xl font-semibold">
+            {(totalDistance - completedDistance).toFixed(2)} KM
+          </p>
         </div>
       </div>
 
-
-      {/* Map Section */}
-      <div className="flex-1 relative">
-        <MapContainer
-          center={paths[selectedPathIndex].coordinates[0]}
-          zoom={15}
-          scrollWheelZoom={true}
-          className="h-full w-full"
-        >
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-
-
-          {/* Polyline for selected path */}
-          <Polyline
-            positions={paths[selectedPathIndex].coordinates}
-            color="blue"
-            weight={6}
-            opacity={0.7}
-            eventHandlers={{
-              mouseover: () =>
-                handleMouseOver("ProjectID-001", "Conflict with ProjectID-002"),
-              mouseout: handleMouseOut,
-            }}
-          />
-
-
-          {/* Polyline for completed path */}
-          <Polyline
-            positions={paths[selectedPathIndex].coordinates.slice(0, Math.ceil(completedDistance / totalDistance * paths[selectedPathIndex].coordinates.length))}
-            color="green"
-            weight={6}
-            opacity={0.7}
-            eventHandlers={{
-              mouseover: () => handleMouseOver("ProjectID-002", "No conflicts"),
-              mouseout: handleMouseOut,
-            }}
-          />
-
-
-          {/* Marker for current location */}
-          {currentLocation && (
-            <Marker position={currentLocation}></Marker>
-          )}
-
-
-          {/* Display hover information */}
-          {hoverInfo && (
-            <Popup position={paths[selectedPathIndex].coordinates[0]}>
-              <div>
-                <p>
-                  <strong>Project ID:</strong> {hoverInfo.projectId}
-                </p>
-                <p>
-                  <strong>Conflict:</strong> {hoverInfo.conflict}
-                </p>
-              </div>
-            </Popup>
-          )}
-        </MapContainer>
-
-
-        {/* Legend */}
-        <div className="absolute bottom-4 left-4 bg-black bg-opacity-75 text-white p-4 rounded-lg shadow-md">
-          <h3 className="text-lg font-bold mb-2">Legend</h3>
-          <p className="text-sm">
-            <span className="inline-block w-4 h-4 bg-blue-500 mr-2"></span> Total Path
-          </p>
-          <p className="text-sm">
-            <span className="inline-block w-4 h-4 bg-green-500 mr-2"></span> Completed Path
-          </p>
+      <div className="glass-panel mt-8 overflow-hidden">
+        <div className="h-[480px]">
+          <MapContainer center={mapCenter} zoom={14} scrollWheelZoom className="h-full w-full">
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            {selectedPath?.points?.length > 1 && (
+              <Polyline
+                positions={selectedPath.points.map((point) => [point.lat, point.lng])}
+                color="#22d3ee"
+                weight={5}
+              />
+            )}
+            {selectedCompletedPath?.points?.length > 1 && (
+              <Polyline
+                positions={selectedCompletedPath.points.map((point) => [point.lat, point.lng])}
+                color="#10b981"
+                weight={5}
+              />
+            )}
+            {selectedPath?.points?.[0] && (
+              <Marker position={[selectedPath.points[0].lat, selectedPath.points[0].lng]} />
+            )}
+          </MapContainer>
         </div>
       </div>
     </div>
   );
 };
-
 
 export default Gis;
 

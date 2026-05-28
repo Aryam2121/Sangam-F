@@ -10,6 +10,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { buildApiUrl } from "../config/api";
 
 
 // Register required components for Chart.js
@@ -45,9 +46,7 @@ const DepartmentPredPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(
-        `https://${import.meta.env.VITE_BACKEND_ML}/predict_department_conflict`,
-        {
+      const response = await fetch(buildApiUrl('/predict_department_conflict', import.meta.env.VITE_BACKEND_ML), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -100,16 +99,16 @@ const DepartmentPredPage = () => {
 
 
   return (
-    <div className="bg-gray-900 text-white min-h-screen p-6">
-      {/* Header Section */}
-      <header className="mb-6 text-center">
-        <h1 className="text-3xl font-bold">Department Conflict Prediction</h1>
-        <p className="text-gray-400 mt-2">Provide details to predict department conflicts</p>
-      </header>
+    <div className="page pb-10">
+      <div className="page-section mb-6">
+        <p className="page-kicker">Prediction</p>
+        <h1 className="page-title mt-2">Department Conflict Prediction</h1>
+        <p className="page-subtitle">Provide details to predict department conflicts.</p>
+      </div>
 
 
       {/* Form Section */}
-      <div className="max-w-4xl mx-auto bg-gray-800 p-6 rounded-lg shadow-lg space-y-8">
+      <div className="page-section space-y-8">
         <form onSubmit={handleSubmit} className="space-y-4">
           {Object.keys(formData).map((key) => (
             <div key={key} className="flex flex-col">
@@ -122,7 +121,7 @@ const DepartmentPredPage = () => {
                 name={key}
                 value={formData[key]}
                 onChange={handleChange}
-                className="mt-1 p-2 bg-gray-700 text-white rounded-md"
+                className="field mt-2"
                 placeholder={`Enter ${key.replace(/_/g, " ")}`}
                 required
               />
@@ -130,7 +129,7 @@ const DepartmentPredPage = () => {
           ))}
           <button
             type="submit"
-            className="bg-indigo-600 hover:bg-indigo-500 text-white py-2 px-4 rounded-md w-full mt-4"
+            className="btn btn-primary w-full mt-2"
           >
             Submit
           </button>

@@ -10,6 +10,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { buildApiUrl } from "../config/api";
 
 // Register required components for Chart.js
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -42,9 +43,7 @@ const ConflictPredPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(
-        `https://${import.meta.env.VITE_BACKEND_ML}/predict_conflict`,
-        {
+      const response = await fetch(buildApiUrl('/predict_conflict', import.meta.env.VITE_BACKEND_ML), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -93,16 +92,16 @@ const ConflictPredPage = () => {
   };
 
   return (
-    <div className="bg-black text-white min-h-screen p-6">
-      {/* Header Section */}
-      <header className="mb-6 text-center">
-        <h1 className="text-3xl font-bold">Conflict Prediction</h1>
-        <p className="text-gray-400 mt-2">Provide details to predict conflict likelihood and resolution</p>
-      </header>
+    <div className="page pb-10">
+      <div className="page-section mb-6">
+        <p className="page-kicker">Prediction</p>
+        <h1 className="page-title mt-2">Conflict Prediction</h1>
+        <p className="page-subtitle">Provide details to predict conflict likelihood and resolution.</p>
+      </div>
 
       {/* Form Section */}
-      <div className="max-w-6xl mx-auto bg-gray-800 p-6 rounded-lg shadow-lg">
-        <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
+      <div className="page-section">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {Object.keys(formData).map((key, index) => (
             <div key={key} className="flex flex-col col-span-1">
               <label htmlFor={key} className="text-gray-400 capitalize">
@@ -114,16 +113,16 @@ const ConflictPredPage = () => {
                 name={key}
                 value={formData[key]}
                 onChange={handleChange}
-                className="mt-1 p-2 bg-gray-700 text-white rounded-md"
+                className="field mt-2"
                 placeholder={`Enter ${key.replace(/_/g, " ")}`}
                 required
               />
             </div>
           ))}
-          <div className="col-span-2">
+          <div className="md:col-span-2">
             <button
               type="submit"
-              className="bg-indigo-600 hover:bg-indigo-500 text-white py-2 px-4 rounded-md w-full mt-4"
+              className="btn btn-primary w-full mt-2"
             >
               Submit
             </button>

@@ -1,36 +1,28 @@
-//new sidebar logic
-import React, { useState } from 'react';
-import { BiBookAlt, BiHome, BiMessage, BiSolidReport, BiStats, BiTask, BiChevronLeft, BiChevronRight, BiTrain, BiLogoDiscord, BiLogOut, BiCurrentLocation } from "react-icons/bi";
-import { Link, useLocation } from 'react-router-dom';
-import Navbar from './Navbar';
+import React from 'react';
+import { useLocation } from 'react-router-dom';
 import AdminSidebar from './AdminSidebar';
 import UserSidebar from './UserSidebar';
 import OfficerSidebar from './OfficerSidebar';
-
+import { useAuth } from '../context/AuthContext';
+import { normalizeRole } from '../utils/authRedirect';
 
 const Sidebar = () => {
-    const location = useLocation();
+  const location = useLocation();
+  const { isAuthenticated, userData } = useAuth();
 
-    const noSidebarRoutes = ["/login", "/register"];
+  const noSidebarRoutes = ['/login', '/register'];
+  const shouldShowSidebar = isAuthenticated && !noSidebarRoutes.includes(location.pathname);
+  const role = normalizeRole(userData?.role || localStorage.getItem('userRole'));
 
-    const shouldShowSidebar = !noSidebarRoutes.includes(location.pathname);
-    const role = localStorage.getItem('userRole'); // Or use context/redux for state management
+  if (!shouldShowSidebar) {
+    return null;
+  }
 
-    if (!shouldShowSidebar) {
-        // If the route is in noSidebarRoutes, render nothing
-        return null;
-    }
+  if (role === 'Main Admin') return <AdminSidebar />;
+  if (role === 'Officer') return <OfficerSidebar />;
+  if (role === 'Worker') return <UserSidebar />;
 
-    // Render different sidebars based on the role
-    if (role === 'Main Admin') {
-        return <AdminSidebar />;
-    } else if (role === 'Officer') {
-        return <OfficerSidebar />;
-    } else if (role === 'Worker') {
-        return <UserSidebar />;
-    }
+  return <AdminSidebar />;
 };
 
 export default Sidebar;
-
-

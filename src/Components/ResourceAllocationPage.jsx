@@ -11,6 +11,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { buildApiUrl } from "../config/api";
 
 
 // Register required components for Chart.js
@@ -44,7 +45,7 @@ const ResourceAllocationPage = () => {
     e.preventDefault();
     try {
       const response = await fetch(
-        `https://${import.meta.env.VITE_BACKEND_ML}/predict_resource_allocation`,
+        buildApiUrl('/predict_resource_allocation', import.meta.env.VITE_BACKEND_ML),
         {
           method: "POST",
           headers: {

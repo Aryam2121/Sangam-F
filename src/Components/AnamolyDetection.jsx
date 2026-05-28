@@ -10,6 +10,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { buildApiUrl } from "../config/api";
 
 ChartJS.register(
   CategoryScale,
@@ -33,7 +34,7 @@ const AnomalyDetectionPage = () => {
   const [predictionResult, setPredictionResult] = useState(null);
 
   const postAnomalyPrediction = async () => {
-    const apiUrl = `https://${import.meta.env.VITE_BACKEND_ML}/predict_anomaly`;
+    const apiUrl = buildApiUrl('/predict_anomaly', import.meta.env.VITE_BACKEND_ML);
     const data = {
       task_priority: taskPriority,
       task_complexity: taskComplexity,
@@ -85,9 +86,10 @@ const AnomalyDetectionPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center p-6">
-      <div className="bg-gray-800 p-8 rounded-lg shadow-md w-full max-w-5xl">
-        <h1 className="text-2xl font-bold text-center mb-8">Anomaly Detection</h1>
+    <div className="page pb-10">
+      <div className="page-section mx-auto w-full max-w-5xl">
+        <p className="page-kicker">Prediction</p>
+        <h1 className="page-title mt-2 mb-8">Anomaly Detection</h1>
 
         {/* Form Section */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
@@ -97,7 +99,7 @@ const AnomalyDetectionPage = () => {
               type="number"
               value={taskPriority}
               onChange={(e) => setTaskPriority(Number(e.target.value))}
-              className="w-full p-3 rounded-lg bg-gray-700 text-white"
+              className="field"
             />
           </div>
           <div>
@@ -106,7 +108,7 @@ const AnomalyDetectionPage = () => {
               type="number"
               value={taskComplexity}
               onChange={(e) => setTaskComplexity(Number(e.target.value))}
-              className="w-full p-3 rounded-lg bg-gray-700 text-white"
+              className="field"
             />
           </div>
           <div>

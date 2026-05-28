@@ -1,10 +1,14 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { fetchSeminars } from "../services/sangamApi";
 import seminar from "../assets/seminar.jpg";
 import meeting from "../assets/meeting.jpg";
 import news from "../assets/news.jpg";
-import videos from "../assets/videos.jpg"
+import videos from "../assets/videos.jpg";
+import PageHeader from "./ui/PageHeader";
 const TrainingPage = () => {
+  const [seminarCount, setSeminarCount] = useState(0);
+  const [docSearch, setDocSearch] = useState("");
   const [pdfFile, setPdfFile] = useState(null);
   const [documents, setDocuments] = useState([
     {
@@ -50,20 +54,44 @@ const TrainingPage = () => {
     ]);
     setPdfFile(null); // Reset the file input after upload
   };
-  const navigate = useNavigate(); // useNavigate hook for navigation
+  const filteredDocuments = useMemo(() => {
+    const q = docSearch.trim().toLowerCase();
+    if (!q) return documents;
+    return documents.filter(
+      (doc) =>
+        doc.name.toLowerCase().includes(q) ||
+        doc.uploader.toLowerCase().includes(q) ||
+        doc.task.toLowerCase().includes(q) ||
+        doc.date.toLowerCase().includes(q)
+    );
+  }, [documents, docSearch]);
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchSeminars()
+      .then((list) => setSeminarCount(list.length))
+      .catch(() => setSeminarCount(0));
+  }, []);
 
   const handleScheduleMeeting = () => {
     navigate("/video-conference"); // Navigate to the VideoConferencing page
   };
   return (
-    <div className="min-h-screen bg-[#101114] text-white p-6 py-24">
-      {/* Top Cards Section */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+    <div className="page pb-10">
+      <PageHeader
+        kicker="Learning"
+        title="Training Center"
+        subtitle="Seminars, videos, meetings, and documents for your team."
+      />
+
+      <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         {[
           {
             title: "Seminars",
+            badge: seminarCount > 0 ? `${seminarCount} live` : null,
             image: seminar, // Replace with the correct image source
-            description: "Join our exclusive seminars on therapeutic advancements.",
+            description: "Join published seminars and learning links from your team.",
             // duration: "Duration: 60 mins",
             // onClick: () => window.location.href = "/seminars", // Replace with the actual URL
             onClick: () =>navigate("/seminar"), // Replace with the actual URL
@@ -90,28 +118,27 @@ const TrainingPage = () => {
             duration: "Updated Daily",
             onClick: () =>navigate("/news"), // Replace with the actual URL
           },
-        ].map(({ title, image, description, duration, onClick }, index) => (
-          <div
-            key={index}
-            className="bg-gray-800 rounded-lg p-6 shadow-md flex flex-col"
-          >
-            <img src={image} alt={title} className="rounded-md mb-4" />
-            <h3 className="text-lg font-semibold mb-2">{title}</h3>
-            <p className="text-gray-400 text-sm mb-4">{description}</p>
-            <p className="text-gray-500 text-sm mb-2">{duration}</p>
-            <button
-              onClick={onClick}
-              className="bg-blue-600 py-2 px-4 rounded-lg text-sm hover:bg-blue-500"
-            >
-              {title === "Schedule meeting" ? "Schedule Meeting" : "Learn More"}
-            </button>
+        ].map(({ title, image, description, duration, onClick, badge }, index) => (
+          <div key={index} className="glass-card flex flex-col overflow-hidden p-0">
+            <img src={image} alt={title} className="h-40 w-full object-cover" />
+            <div className="flex flex-1 flex-col p-5">
+              {badge && (
+                <span className="mb-2 w-fit rounded-full bg-cyan-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-cyan-200">
+                  {badge}
+                </span>
+              )}
+              <h3 className="text-lg font-semibold text-white">{title}</h3>
+              <p className="mt-2 flex-1 text-sm text-slate-400">{description}</p>
+              {duration && <p className="mt-2 text-xs text-slate-500">{duration}</p>}
+              <button type="button" onClick={onClick} className="btn btn-primary mt-4 w-full">
+                {title === "Schedule meeting" ? "Schedule Meeting" : "Learn More"}
+              </button>
+            </div>
           </div>
         ))}
       </div>
 
-
-      {/* Document Table */}
-      <div className="bg-gray-800 p-6 rounded-lg shadow-md">
+      <div className="glass-panel p-6">
         {/* Table Header */}
         <div className="flex justify-between items-center mb-4">
           <div className="text-sm">
@@ -120,8 +147,9 @@ const TrainingPage = () => {
           <div className="flex items-center gap-4">
             {/* Button to trigger the file input */}
             <button
+              type="button"
               onClick={() => document.getElementById("file-input").click()}
-              className="bg-blue-600 py-2 px-4 rounded-lg hover:bg-blue-500"
+              className="btn btn-primary"
             >
               Add New Document
             </button>
@@ -132,16 +160,15 @@ const TrainingPage = () => {
               onChange={handleFileChange}
               style={{ display: "none" }} // Hidden input, triggered by the button
             />
-            <button
-              onClick={handleFileUpload}
-              className="bg-blue-600 py-2 px-4 rounded-lg hover:bg-blue-500"
-            >
+            <button type="button" onClick={handleFileUpload} className="btn btn-primary">
               Upload PDF
             </button>
             <input
-              type="text"
+              type="search"
               placeholder="Search documents..."
-              className="p-2 rounded-lg bg-gray-700 text-white text-sm"
+              className="max-w-xs"
+              value={docSearch}
+              onChange={(e) => setDocSearch(e.target.value)}
             />
           </div>
         </div>
@@ -149,7 +176,7 @@ const TrainingPage = () => {
         {/* Table */}
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="bg-gray-700 text-gray-400">
+            <tr>
               <th className="py-3 px-4">Name</th>
               <th className="py-3 px-4">Uploaded By</th>
               <th className="py-3 px-4">For Task</th>
@@ -158,8 +185,15 @@ const TrainingPage = () => {
             </tr>
           </thead>
           <tbody>
-            {documents.map((doc, index) => (
-              <tr key={index} className="hover:bg-gray-700 transition duration-200">
+            {filteredDocuments.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-8 text-center text-slate-400">
+                  {docSearch ? "No documents match your search." : "No documents yet."}
+                </td>
+              </tr>
+            ) : (
+            filteredDocuments.map((doc, index) => (
+              <tr key={index}>
                 <td className="py-3 px-4 flex items-center">
                   <span className="mr-2 bg-red-500 w-6 h-6 flex items-center justify-center text-white rounded-full text-xs">
                     PDF
@@ -175,7 +209,7 @@ const TrainingPage = () => {
                   <button className="text-gray-400 hover:text-white">•••</button>
                 </td>
               </tr>
-            ))}
+            )))}
           </tbody>
         </table>
 

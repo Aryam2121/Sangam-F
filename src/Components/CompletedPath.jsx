@@ -1,82 +1,89 @@
-import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Polyline } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
+import React, { useEffect, useState } from 'react';
+import { MapContainer, TileLayer, Polyline } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import { apiFetch } from '../config/api';
 
-const TotalPath = () => {
+const DEFAULT_CENTER = [28.6139, 77.209];
+const DEMO_PROJECT_ID = '6749b789545dcca89c35d67a';
+
+const CompletedPath = () => {
   const [coordinates, setCoordinates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch(
-          `https://${import.meta.env.VITE_BACKEND}/api/getpathbyid/6749b789545dcca89c35d67a`
-        );
-        const data = await response.json();
-        const pathData = data.totalpath[0];
-        const allCoordinates = pathData.points.map(point => [point.lat, point.lng]);
-        setCoordinates(allCoordinates); 
-      } catch (error) {
-        console.error('Error fetching data:', error);
+        setError('');
+        const data = await apiFetch(`/api/getcompletedpathbyid/${DEMO_PROJECT_ID}`, { auth: false });
+        const pathData = data?.completedPath?.[0];
+        if (!pathData?.points?.length) {
+          setCoordinates([]);
+          return;
+        }
+        setCoordinates(pathData.points.map((point) => [point.lat, point.lng]));
+      } catch (fetchError) {
+        console.error('Error fetching completed path:', fetchError);
+        setError(fetchError.message || 'Failed to load completed path.');
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchData();
   }, []);
 
+  const mapCenter = coordinates[0] || DEFAULT_CENTER;
+
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold mb-4 mt-4 text-black ">Total Path</h1>
-      <div className="grid grid-cols-3 gap-4">
-        {coordinates.map(([lat, lng], index) => { 
-          if ((index + 1) % 3 === 0) {
-            return (
-              <div 
-                key={index} 
-                className="bg-gray-100 p-2 rounded-md flex items-center"
-              >
-                <span className="text-gray-700 mr-2">
-                  Lat: {lat}, Lng: {lng} 
-                </span>
-              </div>
-            );
-          } else {
-            return (
-              <div 
-                key={index} 
-                className="bg-blue-50 p-2 rounded-md flex items-center"
-              >
-                <span className="text-blue-700 mr-2">
-                  Lat: {lat}, Lng: {lng} 
-                </span>
-              </div>
-            );
-          }
-        })}
+    <div className="page pb-10">
+      <div className="glass-panel mb-6 p-6">
+        <p className="page-kicker">Routing</p>
+        <h1 className="page-title mt-2">Completed Path</h1>
+        <p className="page-subtitle">Executed route segments already finished on site.</p>
       </div>
 
-      <div className="h-96"> {/* Adjust height as needed */}
-        <MapContainer 
-          center={coordinates[0]} 
-          zoom={15} 
-          scrollWheelZoom={true} 
-          style={{ height: '100%' }} 
-        >
-          <TileLayer 
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" 
-          />
+      {error && (
+        <div className="mb-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+          {error}
+        </div>
+      )}
 
-          {coordinates.length > 0 && ( 
-            <Polyline 
-              positions={coordinates} 
-              color="blue" 
-              weight={6} 
-              opacity={0.7} 
-            />
-          )}
-        </MapContainer>
-      </div>
+      {loading ? (
+        <div className="glass-panel flex h-96 items-center justify-center">
+          <div className="loading-spinner" />
+        </div>
+      ) : (
+        <>
+          <div className="glass-panel mb-6 grid max-h-48 grid-cols-1 gap-2 overflow-y-auto p-4 custom-scrollbar sm:grid-cols-2 lg:grid-cols-3">
+            {coordinates.length === 0 ? (
+              <p className="text-sm text-slate-400">No completed path coordinates available.</p>
+            ) : (
+              coordinates.map(([lat, lng], index) => (
+                <div
+                  key={`${lat}-${lng}-${index}`}
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300"
+                >
+                  Point {index + 1}: {lat.toFixed(5)}, {lng.toFixed(5)}
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="glass-panel overflow-hidden p-2">
+            <div className="h-[28rem] w-full overflow-hidden rounded-2xl">
+              <MapContainer center={mapCenter} zoom={13} scrollWheelZoom className="h-full w-full">
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                {coordinates.length > 0 && (
+                  <Polyline positions={coordinates} color="#34d399" weight={5} opacity={0.85} />
+                )}
+              </MapContainer>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
-}
+};
 
-export default TotalPath;
+export default CompletedPath;
