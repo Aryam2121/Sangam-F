@@ -55,6 +55,11 @@ export const getMessagingInstance = async () => {
 };
 
 export const generateFcmToken = async () => {
+  const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY?.trim();
+  if (!vapidKey) {
+    return null;
+  }
+
   const messaging = await getMessagingInstance();
   if (!messaging || typeof Notification === "undefined") return null;
 
@@ -63,9 +68,7 @@ export const generateFcmToken = async () => {
 
   try {
     return await getToken(messaging, {
-      vapidKey:
-        import.meta.env.VITE_FIREBASE_VAPID_KEY ||
-        "BBxI8Dl1gctwWMHzlphfXmu58SVZvMDlyPAXZFhCgAw6fgneqmsdneG-1LDCMakriKdMz99NwVe0Np8e_EFUg8g",
+      vapidKey,
     });
   } catch (err) {
     const message = err?.message || String(err);

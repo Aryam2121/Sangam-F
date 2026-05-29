@@ -15,6 +15,12 @@ const messaging = getMessaging(app);
 
 export async function requestNotificationPermission() {
   console.log("Requesting notification permission...");
+  const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY?.trim();
+  if (!vapidKey) {
+    console.warn("Skipping push notifications because VITE_FIREBASE_VAPID_KEY is not set.");
+    return;
+  }
+
   const permission = await Notification.requestPermission();
   if (permission === "granted") {
     console.log("Notification permission granted.");
@@ -24,7 +30,7 @@ export async function requestNotificationPermission() {
       console.log("Service Worker registered:", registration);
 
       const token = await getToken(messaging, {
-        vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+        vapidKey,
         serviceWorkerRegistration: registration,
       });
       console.log("FCM Token:", token);
