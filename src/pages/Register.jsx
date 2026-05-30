@@ -12,7 +12,7 @@ import {
 } from "react-icons/bi";
 import photo from "../assets/register.png";
 import toast from "react-hot-toast";
-import { buildApiUrl } from "../config/api";
+import { buildApiUrl, getNetworkErrorMessage } from "../config/api";
 import AuthLayout, { AuthField, AuthLink } from "../Components/ui/AuthLayout";
 import GoogleSignInButton from "../Components/ui/GoogleSignInButton";
 import { useGoogleAuth } from "../hooks/useGoogleAuth";
@@ -113,7 +113,9 @@ const Register = () => {
       }
     } catch (err) {
       const message =
-        err?.response?.data?.message || err?.message || "Registration failed. Please try again.";
+        err?.response?.data?.message ||
+        getNetworkErrorMessage(err) ||
+        "Registration failed. Please try again.";
       setError(message);
       toast.error(message);
     } finally {

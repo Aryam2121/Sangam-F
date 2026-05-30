@@ -4,7 +4,7 @@ import { BiEnvelope, BiLock, BiShow, BiHide } from "react-icons/bi";
 import photo from "../assets/photoforlogin.png";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
-import { buildApiUrl } from "../config/api";
+import { fetchJson } from "../config/api";
 import { generateFcmToken, requestPasswordReset } from "../config/firebase";
 import AuthLayout, { AuthField, AuthLink } from "../Components/ui/AuthLayout";
 import GoogleSignInButton from "../Components/ui/GoogleSignInButton";
@@ -34,14 +34,12 @@ const LoginPage = () => {
     setError("");
 
     try {
-      const response = await fetch(buildApiUrl("/admin/login"), {
+      const { response, data } = await fetchJson("/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
         credentials: "include",
       });
-
-      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
         throw new Error(data?.message || "Incorrect email or password");

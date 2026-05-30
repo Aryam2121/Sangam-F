@@ -1,4 +1,4 @@
-import { apiFetch, buildApiUrl, unwrapApiData } from "../config/api";
+import { apiFetch, buildApiUrl, fetchJson, unwrapApiData } from "../config/api";
 
 const asList = (payload) => {
   const data = unwrapApiData(payload);
@@ -84,13 +84,12 @@ export const changePassword = (body) =>
   });
 
 export const googleLogin = async (body) => {
-  const response = await fetch(buildApiUrl("/admin/google-login"), {
+  const { response, data } = await fetchJson("/admin/google-login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify(body),
   });
-  const data = await response.json().catch(() => null);
 
   if (response.status === 404 && data?.data?.needsRegistration) {
     return data.data;
