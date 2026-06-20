@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Circle, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { useNavigate } from "react-router-dom";
-import { buildApiUrl } from "../config/api";
+import { fetchNewPathById } from "../services/sangamApi";
 
 
 const MapLine = () => {
@@ -21,8 +21,7 @@ const MapLine = () => {
   useEffect(() => {
     const fetchCircle1Location = async () => {
       try {
-        const response = await fetch(buildApiUrl('/api/getnewpath/67598e583e5e451ba95f8a42'));
-        const data = await response.json();
+        const data = await fetchNewPathById('67598e583e5e451ba95f8a42');
         if (data.location1?.lat && data.location1?.lng) {
           setCircle1({
             center: [data.location1.lat, data.location1.lng],

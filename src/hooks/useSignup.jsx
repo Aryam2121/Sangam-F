@@ -1,67 +1,40 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { message } from "antd";
-import { buildApiUrl } from "../config/api";
+import { registerUser as apiRegisterUser } from "../services/sangamApi";
+import { completeAuthSession } from "../utils/completeAuthSession";
 
 const useSignup = () => {
   const { login } = useAuth();
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Register a user
   const registerUser = async (values) => {
-    setError(null); // Clear existing error
-  
+    setError(null);
+
     if (values.password !== values.passwordConfirm) {
       setError("Passwords do not match");
       return;
     }
-  
+
     try {
       setLoading(true);
-    
-      const res = await fetch(buildApiUrl('/admin/register'), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-    
-      // Log all details of the response
-      console.log("Response Status:", res.status);
-      console.log("Response Headers:", Array.from(res.headers.entries()));
-    
-      // Read and log the raw response body
-      const rawResponse = await res.text();
-      console.log("Raw Response Body:", rawResponse);
-    
-      // Attempt to parse JSON if the status is okay
-      if (res.ok) {
-        const data = JSON.parse(rawResponse);
-        console.log("Parsed JSON:", data);
-    
-        if (res.status === 201) {
-          message.success(data.message);
-          login(data.token, data.user, 24 * 60 * 60 * 1000);
-        } else {
-          setError(data.message || "Registration failed");
-        }
-      } else {
-        throw new Error(`Error ${res.status}: ${rawResponse}`);
-      }
-    } catch (error) {
-      console.error("Error during signup:", error);
-      setError(error.message);
+      const data = await apiRegisterUser(values);
+      message.success(data?.message || "Registration successful");
+      await completeAuthSession({ login, user: data?.user || data?.data?.user });
+    } catch (err) {
+      setError(err.message || "Registration failed");
     } finally {
       setLoading(false);
     }
   };
-  
+
   return {
     loading,
     error,
     registerUser,
-    clearError: () => setError(null), // Expose this method
-  }; // Expose this method
+    clearError: () => setError(null),
+  };
 };
 
 export default useSignup;

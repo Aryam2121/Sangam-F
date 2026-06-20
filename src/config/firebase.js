@@ -1,81 +1,126 @@
-import { initializeApp } from "firebase/app";
-import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut,
-  sendPasswordResetEmail,
-} from "firebase/auth";
-import { getMessaging, getToken, isSupported } from "firebase/messaging";
-
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCpnRUv4FOfRzZowThODavq6k5ymoiikxQ",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "sangam-d1e5d.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "sangam-d1e5d",
-  storageBucket:
-    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "sangam-d1e5d.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "663528087925",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:663528087925:web:d16678c31713dd451f333c",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-81JC9PXFJ3",
-};
-
-export const firebaseApp = initializeApp(firebaseConfig);
-export const auth = getAuth(firebaseApp);
-
-const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: "select_account" });
-
-export const signInWithGooglePopup = async () => {
-  const result = await signInWithPopup(auth, googleProvider);
-  const idToken = await result.user.getIdToken();
-  return {
-    idToken,
-    user: result.user,
-  };
-};
-
-export const firebaseSignOut = () => signOut(auth);
-
-export const requestPasswordReset = (email) =>
-  sendPasswordResetEmail(auth, email.trim());
-
-let messagingInstance = null;
-
-export const getMessagingInstance = async () => {
-  if (messagingInstance) return messagingInstance;
-  try {
-    const supported = await isSupported();
-    if (supported && typeof window !== "undefined" && "serviceWorker" in navigator) {
-      messagingInstance = getMessaging(firebaseApp);
-    }
-  } catch (err) {
-    console.warn("Firebase messaging not supported:", err?.message || err);
-  }
-  return messagingInstance;
-};
-
-export const generateFcmToken = async () => {
-  const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY?.trim();
-  if (!vapidKey) {
-    return null;
-  }
-
-  const messaging = await getMessagingInstance();
-  if (!messaging || typeof Notification === "undefined") return null;
-
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") return null;
-
-  try {
-    return await getToken(messaging, {
-      vapidKey,
-    });
-  } catch (err) {
-    const message = err?.message || String(err);
-    // Expected in local/dev when Web Push auth isn't fully configured.
-    if (!/token-subscribe-failed|authentication credential/i.test(message)) {
-      console.warn("FCM token unavailable:", message);
-    }
-    return null;
-  }
-};
+import { initializeApp } from "firebase/app";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  sendPasswordResetEmail,
+} from "firebase/auth";
+import { getMessaging, getToken, isSupported } from "firebase/messaging";
+
+const getEnv = (key) => import.meta.env[key]?.trim() || "";
+
+let firebaseAppInstance = null;
+let authInstance = null;
+let messagingInstance = null;
+
+const initFirebaseApp = () => {
+  if (firebaseAppInstance) return firebaseAppInstance;
+
+  const apiKey = getEnv("VITE_FIREBASE_API_KEY");
+  if (!apiKey) return null;
+
+  firebaseAppInstance = initializeApp({
+    apiKey,
+    authDomain: getEnv("VITE_FIREBASE_AUTH_DOMAIN"),
+    projectId: getEnv("VITE_FIREBASE_PROJECT_ID"),
+    storageBucket: getEnv("VITE_FIREBASE_STORAGE_BUCKET"),
+    messagingSenderId: getEnv("VITE_FIREBASE_MESSAGING_SENDER_ID"),
+    appId: getEnv("VITE_FIREBASE_APP_ID"),
+    measurementId: getEnv("VITE_FIREBASE_MEASUREMENT_ID") || undefined,
+  });
+
+  return firebaseAppInstance;
+};
+
+const getFirebaseAuth = () => {
+  const app = initFirebaseApp();
+  if (!app) return null;
+  if (!authInstance) authInstance = getAuth(app);
+  return authInstance;
+};
+
+export const firebaseApp = {
+  get value() {
+    return initFirebaseApp();
+  },
+};
+
+export const auth = {
+  get currentUser() {
+    return getFirebaseAuth()?.currentUser ?? null;
+  },
+};
+
+const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
+
+export const signInWithGooglePopup = async () => {
+  const authClient = getFirebaseAuth();
+  if (!authClient) {
+    throw new Error("Firebase is not configured. Set VITE_FIREBASE_* in .env");
+  }
+
+  const result = await signInWithPopup(authClient, googleProvider);
+  const idToken = await result.user.getIdToken();
+  return {
+    idToken,
+    user: result.user,
+  };
+};
+
+export const firebaseSignOut = () => {
+  const authClient = getFirebaseAuth();
+  return authClient ? signOut(authClient) : Promise.resolve();
+};
+
+export const requestPasswordReset = (email) => {
+  const authClient = getFirebaseAuth();
+  if (!authClient) {
+    return Promise.reject(new Error("Firebase is not configured. Set VITE_FIREBASE_* in .env"));
+  }
+  return sendPasswordResetEmail(authClient, email.trim());
+};
+
+export const getMessagingInstance = async () => {
+  if (messagingInstance) return messagingInstance;
+
+  const app = initFirebaseApp();
+  if (!app) return null;
+
+  try {
+    const supported = await isSupported();
+    if (supported && typeof window !== "undefined" && "serviceWorker" in navigator) {
+      messagingInstance = getMessaging(app);
+    }
+  } catch (err) {
+    console.warn("Firebase messaging not supported:", err?.message || err);
+  }
+  return messagingInstance;
+};
+
+export const generateFcmToken = async () => {
+  const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY?.trim();
+  if (!vapidKey) {
+    return null;
+  }
+
+  const messaging = await getMessagingInstance();
+  if (!messaging || typeof Notification === "undefined") return null;
+
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") return null;
+
+  try {
+    return await getToken(messaging, {
+      vapidKey,
+    });
+  } catch (err) {
+    const message = err?.message || String(err);
+    if (!/token-subscribe-failed|authentication credential/i.test(message)) {
+      console.warn("FCM token unavailable:", message);
+    }
+    return null;
+  }
+};
+

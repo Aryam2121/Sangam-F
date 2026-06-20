@@ -10,7 +10,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
-import { buildApiUrl } from "../config/api";
+import { mlPredict } from "../services/sangamApi";
 
 // Register required components for Chart.js
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -43,16 +43,7 @@ const ConflictPredPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(buildApiUrl('/predict_conflict', import.meta.env.VITE_BACKEND_ML), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(formData),
-        }
-      );
-
-      const data = await response.json();
+      const data = await mlPredict('/predict_conflict', formData);
       setResult(data);
 
       // Update chart data dynamically based on response

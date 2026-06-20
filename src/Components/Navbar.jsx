@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { firebaseSignOut } from "../config/firebase";
-import { fetchNotifications } from "../services/sangamApi";
+import { fetchNotifications, logoutSession } from "../services/sangamApi";
 import { homePathForRole, normalizeRole } from "../utils/authRedirect";
 import GlobalSearch from "./ui/GlobalSearch";
 import { getUserAvatarUrl } from "../utils/userAvatar";
@@ -212,7 +212,12 @@ const Navbar = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
+                    try {
+                      await logoutSession();
+                    } catch {
+                      /* session may already be invalid */
+                    }
                     logout();
                     firebaseSignOut().catch(() => {});
                     navigate("/login");

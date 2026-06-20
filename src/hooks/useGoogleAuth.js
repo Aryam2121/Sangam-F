@@ -36,12 +36,11 @@ export const useGoogleAuth = () => {
       }
 
       const user = result?.user;
-      const accessToken = result?.accessToken;
-      if (!user || !accessToken) {
+      if (!user) {
         throw new Error("Invalid Google login response");
       }
 
-      await completeAuthSession({ login, accessToken, user, fcmToken });
+      await completeAuthSession({ login, user, fcmToken });
       toast.success("Welcome!");
       navigate(homePathForRole(user.role));
     } catch (err) {

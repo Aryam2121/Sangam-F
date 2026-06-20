@@ -18,11 +18,11 @@ const Sidebar = () => {
     return null;
   }
 
-  if (role === 'Main Admin') return <AdminSidebar />;
+  if (role === 'Main Admin' || role === 'Department Admin') return <AdminSidebar />;
   if (role === 'Officer') return <OfficerSidebar />;
   if (role === 'Worker') return <UserSidebar />;
 
-  return <AdminSidebar />;
+  return <UserSidebar />;
 };
 
 export default Sidebar;

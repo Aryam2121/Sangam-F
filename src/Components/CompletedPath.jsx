@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { apiFetch } from '../config/api';
+import { fetchCompletedPathById } from '../services/sangamApi';
 
 const DEFAULT_CENTER = [28.6139, 77.209];
 const DEMO_PROJECT_ID = '6749b789545dcca89c35d67a';
@@ -15,7 +15,7 @@ const CompletedPath = () => {
     const fetchData = async () => {
       try {
         setError('');
-        const data = await apiFetch(`/api/getcompletedpathbyid/${DEMO_PROJECT_ID}`, { auth: false });
+        const data = await fetchCompletedPathById(DEMO_PROJECT_ID);
         const pathData = data?.completedPath?.[0];
         if (!pathData?.points?.length) {
           setCoordinates([]);

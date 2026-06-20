@@ -40,7 +40,10 @@ export const fetchJson = async (path, options = {}) => {
   const { baseUrl = APP_API_BASE_URL, ...fetchOptions } = options;
 
   try {
-    const response = await fetch(buildApiUrl(path, baseUrl), fetchOptions);
+    const response = await fetch(buildApiUrl(path, baseUrl), {
+      credentials: 'include',
+      ...fetchOptions,
+    });
     const data = await response.json().catch(() => null);
     return { response, data };
   } catch (error) {
@@ -48,10 +51,8 @@ export const fetchJson = async (path, options = {}) => {
   }
 };
 
-export const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
+/** Session auth uses httpOnly cookies; no Authorization header required. */
+export const getAuthHeaders = () => ({});
 
 export const buildApiUrl = (path = '', baseUrl = APP_API_BASE_URL) => {
   if (!baseUrl) {
@@ -69,20 +70,37 @@ export const apiFetch = async (path, options = {}) => {
     baseUrl = APP_API_BASE_URL,
     auth = true,
     parseJson = true,
+    retryOnUnauthorized = true,
     ...fetchOptions
   } = options;
 
-  const headers = {
-    ...(parseJson ? { 'Content-Type': 'application/json' } : {}),
-    ...(auth ? getAuthHeaders() : {}),
-    ...(fetchOptions.headers || {}),
+  const isFormData =
+    typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
+
+  const execute = async () => {
+    const headers = {
+      ...(parseJson && !isFormData ? { 'Content-Type': 'application/json' } : {}),
+      ...(auth ? getAuthHeaders() : {}),
+      ...(fetchOptions.headers || {}),
+    };
+
+    return fetch(buildApiUrl(path, baseUrl), {
+      credentials: 'include',
+      ...fetchOptions,
+      headers,
+    });
   };
 
-  const response = await fetch(buildApiUrl(path, baseUrl), {
-    credentials: 'include',
-    ...fetchOptions,
-    headers,
-  });
+  let response = await execute();
+
+  if (auth && retryOnUnauthorized && response.status === 401) {
+    try {
+      await refreshAccessToken();
+      response = await execute();
+    } catch {
+      /* fall through */
+    }
+  }
 
   if (!parseJson) {
     if (!response.ok) {
@@ -111,6 +129,35 @@ export const unwrapApiData = (payload) => {
     return payload.data;
   }
   return payload;
+};
+
+let refreshInFlight = null;
+
+export const refreshAccessToken = async () => {
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+
+  refreshInFlight = (async () => {
+    const { response, data } = await fetchJson('/admin/refresh-token', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      throw new Error(data?.message || 'Session expired');
+    }
+
+    return true;
+  })();
+
+  try {
+    return await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
 };
 
 export default buildApiUrl;

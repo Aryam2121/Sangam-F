@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Circle, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { Navigate,useNavigate } from "react-router-dom";
-import { buildApiUrl } from "../config/api";
+import { fetchNewPathById } from "../services/sangamApi";
 
 const MapNew = () => {
     const [circle1, setCircle1] = useState(null);
@@ -18,8 +18,7 @@ const MapNew = () => {
     // Fetch location for Circle 1 and Circle 3 from the API
     const fetchCircleLocations = async () => {
         try {
-            const response1 = await fetch(buildApiUrl('/api/getnewpath/67598e583e5e451ba95f8a42'));
-            const data1 = await response1.json();
+            const data1 = await fetchNewPathById('67598e583e5e451ba95f8a42');
             //   console.log(data1.location2.lat, data1.location2.lng);
             //   console.log(data1.location1.lat, data1.location1.lng);
 

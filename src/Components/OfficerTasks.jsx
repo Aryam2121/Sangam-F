@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { PieChart, Pie, Cell } from "recharts";
-import { buildApiUrl } from "../config/api";
+import { fetchTasks, fetchTasksByUser, updateTask } from "../services/sangamApi";
 import { useAuth } from "../context/AuthContext";
 
 const OfficerTasks = () => {
@@ -18,13 +18,10 @@ const OfficerTasks = () => {
       setIsLoading(true);
       setError("");
 
-      const url =
+      const data =
         role === "Worker" && userData?._id
-          ? buildApiUrl(`/api/getalltasksbyuserid/${userData._id}`)
-          : buildApiUrl("/api/getalltasks");
-
-      const response = await fetch(url);
-      const data = await response.json();
+          ? await fetchTasksByUser(userData._id)
+          : await fetchTasks();
       const nextTasks = Array.isArray(data) ? data : data?.tasks || [];
       setTasks(nextTasks);
     } catch (err) {
@@ -54,11 +51,7 @@ const OfficerTasks = () => {
 
   const updateTaskStatus = async (taskId, nextStatus) => {
     try {
-      await fetch(buildApiUrl(`/api/project/task/${taskId}`), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: nextStatus }),
-      });
+      await updateTask(taskId, { status: nextStatus });
       fetchTasks();
     } catch (err) {
       console.error("Failed to update task", err);

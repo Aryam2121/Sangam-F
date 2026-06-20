@@ -3,8 +3,12 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { useNavigate } from "react-router-dom";
 import { FaComments, FaVideo, FaFilePdf, FaFileAlt, FaFileImage, FaCloudUploadAlt } from "react-icons/fa";
 import { useParams } from 'react-router-dom';
-import axios from "axios";
-import { buildApiUrl } from "../config/api";
+import {
+  fetchTasksByProjectId as apiFetchTasksByProjectId,
+  fetchProjectResources,
+  fetchProjectReport,
+  uploadProjectReport,
+} from "../services/sangamApi";
 
 const ProjectDetails = () => {
 
@@ -58,13 +62,13 @@ const ProjectDetails = () => {
       setTaskError("");
       console.log(`Fetching tasks for project ID: ${projectId}`); // Add this log for debugging
 
-      const response = await axios.get(buildApiUrl(`/api/project/${projectId}/tasks`));
-      console.log("Tasks fetched aryaman successfully:", response.data); // Log the fetched tasks
-      setTasks(response.data);
+      const data = await apiFetchTasksByProjectId(projectId);
+      console.log("Tasks fetched aryaman successfully:", data);
+      setTasks(Array.isArray(data) ? data : []);
     } catch (err) {
       console.log(err)
-      console.error("Error fetching tasks:", err.response?.data || err.message);
-      setTaskError(err.response?.data?.error || "Failed to fetch tasks.");
+      console.error("Error fetching tasks:", err.message);
+      setTaskError(err.message || "Failed to fetch tasks.");
     } finally {
       setLoading(false);
     }
@@ -79,11 +83,11 @@ const ProjectDetails = () => {
     try {
       setLoading(true);
       setResError("");
-      const response = await axios.get(buildApiUrl(`/api/project/${projectId}/resources`));
-      setResources(response.data);
-      console.log(response.data, "hello vanshika")
+      const data = await fetchProjectResources(projectId);
+      setResources(Array.isArray(data) ? data : []);
+      console.log(data, "hello vanshika")
     } catch (err) {
-      setResError(err.response?.data?.error || "Failed to fetch resources.");
+      setResError(err.message || "Failed to fetch resources.");
     } finally {
       setLoading(false);
     }
@@ -121,27 +125,21 @@ const ProjectDetails = () => {
     }
 
     try {
-      const response = await fetch(buildApiUrl(`/api/getReportByProjectId/${projectId}`));
+      const data = await fetchProjectReport(projectId);
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch reports');
-      }
-
-      const data = await response.json();
-
-      // Log the entire data object to inspect its structure
       console.log("API Response:", data);
 
-      // Check if reports are in `data.reports` or `data.reportUrls`
-      if (Array.isArray(data.reports)) {
-        setReports(data.reports);  // Assuming reports are an array
-      } else if (Array.isArray(data.reportUrls)) {
-        setReports(data.reportUrls);  // Assuming reportUrls are the report links
+      if (Array.isArray(data?.reports)) {
+        setReports(data.reports);
+      } else if (Array.isArray(data?.reportUrls)) {
+        setReports(data.reportUrls);
+      } else if (data?.reportUrl) {
+        setReports([data.reportUrl]);
       } else {
-        setReports([]);  // If neither are an array or data is malformed
+        setReports([]);
       }
 
-      console.log("Reports fetched successfully", data);  // Log the entire response for debugging
+      console.log("Reports fetched successfully", data);
     } catch (error) {
       console.error('Error fetching reports:', error);
       setReports([]);  // Ensure reports state is empty on error
@@ -178,14 +176,8 @@ const ProjectDetails = () => {
     const formData = new FormData();
     formData.append('report', file);
 
-    const url = buildApiUrl(`/api/uploadProjectReport/${projectId}`);
-
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await response.json();
+      const data = await uploadProjectReport(projectId, formData);
 
       if (data.success) {
         setMessage(`File uploaded successfully! Report URL: ${data.reportUrl}`);
@@ -266,30 +258,20 @@ const ProjectDetails = () => {
       }
 
       try {
-        const response = await fetch(buildApiUrl(`/api/getReportByProjectId/${projectId}`));
+        const data = await fetchProjectReport(projectId);
 
-        // Checking if the response is successful
-        if (!response.ok) {
-          throw new Error('Failed to fetch reports');
-        }
-
-        const data = await response.json();
-
-        // Check if data has a nested 'report' object
-        if (data.report) {
-          // If 'reportUrl' exists inside 'report', handle it
-          if (data.report.reportUrl) {
-            setReports([data.report.reportUrl]); // Wrap the single URL in an array
-          } else {
-            console.warn("No report URL found in the report object", data);
-            setReports([]); // Handle case where 'reportUrl' is missing
-          }
+        if (data?.reportUrl) {
+          setReports([data.reportUrl]);
+        } else if (Array.isArray(data?.reportUrls)) {
+          setReports(data.reportUrls);
+        } else if (Array.isArray(data?.reports)) {
+          setReports(data.reports);
         } else {
-          console.warn("Unexpected response format: 'report' object is missing", data);
-          setReports([]);  // Handle case where 'report' is missing
+          console.warn("No report URL found in the report object", data);
+          setReports([]);
         }
 
-        console.log("Reports fetched successfully", data.report);  // Success log
+        console.log("Reports fetched successfully", data);
       } catch (error) {
         console.error('Error fetching reports:', error);
         setReports([]);  // Ensure reports state is empty on error

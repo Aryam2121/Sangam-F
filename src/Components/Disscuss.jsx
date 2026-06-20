@@ -1,14 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import io from 'socket.io-client';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AiOutlineSend } from 'react-icons/ai';
 import { FaSmile } from 'react-icons/fa';
 import toast from 'react-hot-toast';
-import { APP_API_BASE_URL, buildApiUrl } from '../config/api';
-import { fetchDiscussionHistory } from '../services/sangamApi';
+import { fetchDepartments, fetchDiscussionHistory } from '../services/sangamApi';
+import { createAuthenticatedSocket } from '../utils/socketClient';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from './ui/PageHeader';
-
-const socket = io(APP_API_BASE_URL, { withCredentials: true });
 
 const fallbackDepartments = [
   { name: "Water", icon: "💧" },
@@ -37,6 +34,7 @@ const shapeMessage = (msg) => ({
 const Discuss = () => {
   const { userData } = useAuth();
   const displayName = userData?.fullName || userData?.username || "User";
+  const socketRef = useRef(null);
 
   const [departments, setDepartments] = useState(fallbackDepartments);
   const [selectedDepartment, setSelectedDepartment] = useState(fallbackDepartments[0].name);
@@ -59,11 +57,19 @@ const Discuss = () => {
   }, []);
 
   useEffect(() => {
+    const socket = createAuthenticatedSocket();
+    socketRef.current = socket;
+    return () => {
+      socket?.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     const loadDepartments = async () => {
       try {
-        const response = await fetch(buildApiUrl('/api/getalldep'));
-        const data = await response.json();
-        const mapped = (Array.isArray(data) ? data : []).map((dept) => ({
+        const departments = await fetchDepartments();
+        const mapped = departments.map((dept) => ({
           name: dept.name,
           icon: iconByName(dept.name),
         }));
@@ -80,7 +86,9 @@ const Discuss = () => {
   }, []);
 
   useEffect(() => {
-    if (!selectedDepartment) return;
+    if (!selectedDepartment || !socketRef.current) return undefined;
+
+    const socket = socketRef.current;
 
     loadHistory(selectedDepartment);
     socket.emit('joinDepartment', selectedDepartment);
@@ -107,16 +115,12 @@ const Discuss = () => {
   }, [selectedDepartment, loadHistory]);
 
   const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
-    const message = {
-      id: Date.now(),
-      user: displayName,
+    if (!newMessage.trim() || !socketRef.current) return;
+    socketRef.current.emit('sendMessage', {
       department: selectedDepartment,
       content: newMessage.trim(),
-      time: new Date().toLocaleTimeString(),
       isFavorite: false,
-    };
-    socket.emit('sendMessage', message);
+    });
     setNewMessage("");
   };
 

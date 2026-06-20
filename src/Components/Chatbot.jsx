@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import axios from "axios";
 import { AnimatePresence, motion } from "framer-motion";
-import { buildApiUrl } from "../config/api";
+import { assistantChat } from "../services/sangamApi";
 
 const languageLabels = {
   en: "English",
@@ -73,13 +72,13 @@ const Chatbot = () => {
 
     setLoading(true);
     try {
-      const response = await axios.post(buildApiUrl("/api/assistant/chat"), {
+      const response = await assistantChat({
         message: trimmed,
         language,
       });
 
-      const reply = response.data?.reply || "No response from assistant.";
-      setAssistantMode(response.data?.mode || "live");
+      const reply = response?.reply || response?.data?.reply || "No response from assistant.";
+      setAssistantMode(response?.mode || response?.data?.mode || "live");
       pushMessage("bot", reply);
     } catch (requestError) {
       const fallback =

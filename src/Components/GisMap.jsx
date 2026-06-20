@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { MapContainer, TileLayer, Polyline, Marker } from "react-leaflet";
 import { Button, Container, Typography, Box, Card, CardContent } from "@mui/material";
-import { useEffect } from "react";
 import { buildApiUrl } from "../config/api";
 const postPathToBackend = async (projectId, path, timestamp, distance) => {
   const apiUrl = buildApiUrl('/api/path');
@@ -38,6 +37,7 @@ const postPathToBackend = async (projectId, path, timestamp, distance) => {
 };
 function GisMap() {
   const { projectId } = useParams(); // Get projectId from URL
+  const watchIdRef = useRef(null);
   const [currentPath, setCurrentPath] = useState([]);
   const [markerPosition, setMarkerPosition] = useState(null);
   const [pathData, setPathData] = useState(null);
@@ -57,9 +57,20 @@ function GisMap() {
     }
   };
 fetchProjectPath();
-}, [projectId])
+}, [projectId]);
+
+  useEffect(() => () => {
+    if (watchIdRef.current != null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  }, []);
+
   const startTracking = () => {
-    navigator.geolocation.watchPosition(
+    if (watchIdRef.current != null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
+    watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
         const newLocation = [position.coords.latitude, position.coords.longitude];
         setCurrentPath((prevPath) => [...prevPath, newLocation]);
@@ -72,6 +83,10 @@ fetchProjectPath();
     );
   };
   const stopTrackingAndSave = async () => {
+    if (watchIdRef.current != null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
     const timestamp = new Date().toISOString();
     const distance = calculateDistance(currentPath);
     const savedData = await postPathToBackend(projectId, currentPath, timestamp, distance);

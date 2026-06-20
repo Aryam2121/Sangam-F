@@ -13,7 +13,6 @@ import {
   BiLayer,
   BiEdit,
 } from "react-icons/bi";
-import { buildApiUrl } from "../config/api";
 import { isMainAdmin } from "../utils/rolePermissions";
 import {
   fetchResources as apiFetchResources,
@@ -21,6 +20,8 @@ import {
   updateResource as apiUpdateResource,
   deleteResource as apiDeleteResource,
   assignResource as apiAssignResource,
+  fetchProjectResources,
+  fetchResourceById as apiFetchResourceById,
 } from "../services/sangamApi";
 
 const TABS = [
@@ -345,10 +346,7 @@ const Resources = () => {
     setError("");
 
     try {
-      const response = await fetch(buildApiUrl(`/api/project/${projectId}/resources`));
-      if (!response.ok) throw new Error("No resources found for this project.");
-      const data = await response.json();
-      const list = Array.isArray(data) ? data : [];
+      const list = await fetchProjectResources(projectId);
       setResources(list.map(mapResource));
       setHighlightedProjectId(projectId);
       setActiveTab("assigned");
@@ -375,9 +373,7 @@ const Resources = () => {
     setError("");
 
     try {
-      const response = await fetch(buildApiUrl(`/api/resource/${resourceId}`));
-      if (!response.ok) throw new Error("Resource not found. Check the ID.");
-      const data = await response.json();
+      const data = await apiFetchResourceById(resourceId);
       setResources([mapResource(data)]);
       setActiveTab("all");
       toast.success("Resource found");

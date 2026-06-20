@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { FaSpinner } from "react-icons/fa";
-import { buildApiUrl, getAuthHeaders } from "../config/api";
+import { fetchAllUsers, fetchProjects } from "../services/sangamApi";
 
 const DepartmentDetails = () => {
   const location = useLocation();
@@ -18,20 +18,9 @@ const DepartmentDetails = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const projectResponse = await fetch(buildApiUrl('/api/getallprojects'));
-        const userResponse = await fetch(buildApiUrl('/admin/getalluser'), {
-          headers: {
-            ...getAuthHeaders(),
-          },
-          credentials: 'include',
-        });
-
-        if (!projectResponse.ok || !userResponse.ok) {
-          throw new Error("Failed to fetch data");
-        }
-
-        const projectsData = await projectResponse.json();
-        const usersData = await userResponse.json();
+        const projectsData = await fetchProjects();
+        const usersPayload = await fetchAllUsers();
+        const usersData = usersPayload;
 
         const filteredProjects = (projectsData || []).filter((project) => {
           const departments = project.departments || [];

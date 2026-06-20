@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import axios from "axios";
 import {
   BiUser,
   BiEnvelope,
@@ -12,19 +11,19 @@ import {
 } from "react-icons/bi";
 import photo from "../assets/register.png";
 import toast from "react-hot-toast";
-import { buildApiUrl, getNetworkErrorMessage } from "../config/api";
+import { getNetworkErrorMessage } from "../config/api";
 import AuthLayout, { AuthField, AuthLink } from "../Components/ui/AuthLayout";
 import GoogleSignInButton from "../Components/ui/GoogleSignInButton";
 import { useGoogleAuth } from "../hooks/useGoogleAuth";
 import { useAuth } from "../context/AuthContext";
-import { googleRegister } from "../services/sangamApi";
+import { googleRegister, registerUser } from "../services/sangamApi";
 import { homePathForRole } from "../utils/authRedirect";
 import { completeAuthSession } from "../utils/completeAuthSession";
 import { generateFcmToken } from "../config/firebase";
 
-const DEPARTMENTS = ["Water", "Gas", "Road Construction"];
+const DEPARTMENTS = ["Water", "Gas", "Roads", "Electricity", "Municipal"];
 const ROLES = [
-  { value: "Main Admin", label: "Admin" },
+  { value: "Department Admin", label: "Department Admin" },
   { value: "Officer", label: "Officer" },
   { value: "Worker", label: "Worker" },
 ];
@@ -59,7 +58,7 @@ const Register = () => {
     }
   }, [googlePrefill]);
 
-  const isMainAdmin = formData.role === "Main Admin";
+  const isDepartmentAdmin = formData.role === "Department Admin";
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -84,17 +83,16 @@ const Register = () => {
         const result = await googleRegister({
           idToken: googlePrefill.idToken,
           role: formData.role,
-          department: isMainAdmin ? undefined : formData.department,
+          department: formData.department,
           username: formData.username.trim() || undefined,
           fullName: formData.fullName.trim(),
           fcmToken,
         });
         const user = result?.user;
-        const accessToken = result?.accessToken;
-        if (!user || !accessToken) {
+        if (!user) {
           throw new Error("Registration succeeded but login failed");
         }
-        await completeAuthSession({ login, accessToken, user, fcmToken });
+        await completeAuthSession({ login, user, fcmToken });
         toast.success("Welcome to Sangam!");
         navigate(homePathForRole(user.role));
         return;
@@ -102,20 +100,14 @@ const Register = () => {
 
       const payload = {
         ...formData,
-        department: isMainAdmin ? undefined : formData.department,
+        department: formData.department,
       };
 
-      const response = await axios.post(buildApiUrl("/admin/register"), payload);
-
-      if (response.status === 201) {
-        toast.success("Account created! Please sign in.");
-        navigate("/login");
-      }
+      await registerUser(payload);
+      toast.success("Account created! Please sign in.");
+      navigate("/login");
     } catch (err) {
-      const message =
-        err?.response?.data?.message ||
-        getNetworkErrorMessage(err) ||
-        "Registration failed. Please try again.";
+      const message = err?.message || getNetworkErrorMessage(err) || "Registration failed. Please try again.";
       setError(message);
       toast.error(message);
     } finally {
@@ -269,7 +261,7 @@ const Register = () => {
           <AuthField
             label="Department"
             id="department"
-            hint={isMainAdmin ? "Not required for admin accounts" : undefined}
+            hint={isDepartmentAdmin ? "Required for department admin" : undefined}
           >
             <div className="relative">
               <BiBuilding className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-500" />
@@ -278,9 +270,8 @@ const Register = () => {
                 name="department"
                 value={formData.department}
                 onChange={handleChange}
-                disabled={isMainAdmin}
-                className="auth-input pl-11 disabled:cursor-not-allowed disabled:opacity-50"
-                required={!isMainAdmin}
+                className="auth-input pl-11"
+                required
               >
                 <option value="">Select department</option>
                 {DEPARTMENTS.map((d) => (

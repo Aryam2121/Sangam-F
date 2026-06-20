@@ -94,6 +94,8 @@ const BidSystem = () => {
     setEditBid(bid);
   };
 
+  const handleCloseDetails = () => setSelectedBid(null);
+
   const handleUpdateBid = async () => {
     if (!editBid?._id) return;
     setSaving(true);

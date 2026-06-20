@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { MapContainer, TileLayer, Polyline, Marker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { buildApiUrl } from "../config/api";
+import { fetchCompletedPathById, fetchPathById, fetchProjects } from "../services/sangamApi";
 
 const Gis = () => {
   const [projects, setProjects] = useState([]);
@@ -48,8 +48,7 @@ const Gis = () => {
   useEffect(() => {
     const loadProjects = async () => {
       try {
-        const response = await fetch(buildApiUrl('/api/getallprojects'));
-        const data = await response.json();
+        const data = await fetchProjects();
         setProjects(Array.isArray(data) ? data : []);
         setSelectedProjectId(data?.[0]?._id || "");
       } catch (err) {
@@ -68,13 +67,10 @@ const Gis = () => {
         setIsLoading(true);
         setError("");
 
-        const [totalResponse, completedResponse] = await Promise.all([
-          fetch(buildApiUrl(`/api/getpathbyid/${selectedProjectId}`)),
-          fetch(buildApiUrl(`/api/getcompletedpathbyid/${selectedProjectId}`)),
+        const [totalData, completedData] = await Promise.all([
+          fetchPathById(selectedProjectId),
+          fetchCompletedPathById(selectedProjectId),
         ]);
-
-        const totalData = totalResponse.ok ? await totalResponse.json() : null;
-        const completedData = completedResponse.ok ? await completedResponse.json() : null;
 
         const totalPaths = totalData?.totalpath || [];
         const completed = completedData?.completedPath || [];

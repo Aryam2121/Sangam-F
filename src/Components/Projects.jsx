@@ -4,9 +4,15 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { motion } from "framer-motion";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
 import { FaTasks, FaUser,FaCheckCircle,FaTimesCircle } from "react-icons/fa";
-import { buildApiUrl } from "../config/api";
+import {
+  fetchProjects as fetchProjectsApi,
+  createProject as createProjectApi,
+  deleteProject,
+  updateProject,
+  fetchProjectById,
+  createProjectMLModel,
+} from "../services/sangamApi";
 const COLORS = ["#0088FE", "#00C49F"];
 const role = localStorage.getItem('userRole');
 
@@ -142,8 +148,7 @@ const Projects = () => {
   const fetchProjects = async () => {
     try {
       setProjectsLoading(true);
-      const response = await fetch(buildApiUrl('/api/getallprojects'));
-      const data = await response.json();
+      const data = await fetchProjectsApi();
       setProjects(asProjectList(data));
     } catch (error) {
       toast.error("Failed to fetch projects");
@@ -156,13 +161,8 @@ const Projects = () => {
       prevProjects.filter((project) => project._id !== projectId)
     );
 
-    fetch(buildApiUrl(`/api/project/${projectId}`), {
-      method: 'DELETE',
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error('Failed to delete the project');
-        }
+    deleteProject(projectId)
+      .then(() => {
         console.log(`Project with ID ${projectId} deleted successfully`);
       })
       .catch((error) => {
@@ -171,31 +171,23 @@ const Projects = () => {
   };
   const createProject = async () => {
     try {
-      const response = await fetch(buildApiUrl('/api/project'), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newProject),
+      await createProjectApi(newProject);
+      fetchProjects(); // Refresh project list
+      toast.success("Project created successfully");
+      setShowModal(false);
+      setNewProject({
+        name: "",
+        startDate: "",
+        description: "",
+        departments:[],
+        projectAdmin: "",
+        workers: [],
+        tasks: [],
+        status: "active",
+        resources: "",
+        workerIds: [],
+        taskIds: []
       });
-      if (response.ok) {
-        fetchProjects(); // Refresh project list
-        toast.success("Project created successfully");
-        setShowModal(false);
-        setNewProject({
-          name: "",
-          startDate: "",
-          description: "",
-          departments:[],
-          projectAdmin: "",
-          workers: [],
-          tasks: [],
-          status: "active",
-          resources: "",
-          workerIds: [],
-          taskIds: []
-        });
-      } else {
-        toast.error("Failed to create project");
-      }
     } catch (error) {
       toast.error("Failed to create project");
     }
@@ -221,18 +213,12 @@ const Projects = () => {
     try {
       setLoading(true);
       setError(""); // Reset error before the new fetch
-      const response = await axios.get(
-        buildApiUrl(`/api/getprojectbyid/${projectId}`)
-      );
-      // Log the response data to check its structure
-      console.log("Response data:", response.data);
-
-
-      // Assuming the response has 'data.project' and set that as the projectData
-      setProjectData(response.data.project); // Correctly set project data
+      const data = await fetchProjectById(projectId);
+      console.log("Response data:", data);
+      setProjectData(data);
     } catch (err) {
-      console.error("Error fetching project:", err.response?.data || err.message);
-      setError(err.response?.data?.message || "Failed to fetch project by ID.");
+      console.error("Error fetching project:", err.message);
+      setError(err.message || "Failed to fetch project by ID.");
     } finally {
       setLoading(false);
     }
@@ -255,27 +241,15 @@ const Projects = () => {
  
   const handleUpdateProject = async () => {
     try {
-      const response = await fetch(
-        buildApiUrl(`/api/updateproject/${selectedProject._id}`),
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updatedProject),
-        }
+      const updatedData = await updateProject(selectedProject._id, updatedProject);
+      const nextProject = updatedData?.updatedProject || updatedData;
+      setProjects((prevProjects) =>
+        prevProjects.map((project) =>
+          project._id === nextProject._id ? nextProject : project
+        )
       );
-      if (response.ok) {
-        const updatedData = await response.json();
-        const nextProject = updatedData?.updatedProject || updatedData;
-        setProjects((prevProjects) =>
-          prevProjects.map((project) =>
-            project._id === nextProject._id ? nextProject : project
-          )
-        );
-        toast.success("Project updated successfully!");
-        setShowEditModal(false);  // Close the modal after successful update
-      } else {
-        toast.error("Failed to update project");
-      }
+      toast.success("Project updated successfully!");
+      setShowEditModal(false);  // Close the modal after successful update
     } catch (error) {
       toast.error("Error updating project");
     }
@@ -336,21 +310,7 @@ const Projects = () => {
 
 
     try {
-      const response = await fetch(buildApiUrl('/api/projectMLModel'), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
-
-
-      if (!response.ok) {
-        throw new Error(`Error: ${response.status}`);
-      }
-
-
-      const data = await response.json();
+      const data = await createProjectMLModel(formData);
       setResponse(data);
     } catch (err) {
       setError(err.message);

@@ -1,11 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import Modal from "react-modal";
 import { BiPlus, BiSearch, BiRefresh } from "react-icons/bi";
 import { toast } from "react-toastify";
-import { buildApiUrl, getAuthHeaders } from "../config/api";
 import PageHeader from "./ui/PageHeader";
-import { deleteTask as apiDeleteTask, fetchTasks } from "../services/sangamApi";
+import {
+  deleteTask as apiDeleteTask,
+  fetchTasks,
+  fetchAllUsers,
+  fetchProjects,
+  fetchTaskById as apiFetchTaskById,
+  fetchTasksByProjectId as apiFetchTasksByProjectId,
+  fetchTaskReport,
+  createTask as apiCreateTask,
+  updateTask,
+  uploadTaskReport,
+} from "../services/sangamApi";
 import { BiTrash } from "react-icons/bi";
 
 const customModalStyles = {
@@ -67,14 +76,7 @@ const TaskManager = () => {
 
   const fetchData = async () => {
     try {
-      const response = await fetch(buildApiUrl("/admin/getalluser"), {
-        headers: {
-          ...getAuthHeaders(),
-        },
-        credentials: "include",
-      });
-      const jsonData = await response.json();
-      const users = Array.isArray(jsonData?.data) ? jsonData.data : jsonData;
+      const users = await fetchAllUsers();
       setData(Array.isArray(users) ? users : []);
     } catch (fetchError) {
       console.error("Error fetching users:", fetchError);
@@ -83,8 +85,7 @@ const TaskManager = () => {
 
   const fetchNames = async () => {
     try {
-      const response = await fetch(buildApiUrl("/api/getallprojects"));
-      const jsonData = await response.json();
+      const jsonData = await fetchProjects();
       setNames(Array.isArray(jsonData) ? jsonData : []);
     } catch (fetchError) {
       console.error("Error fetching projects:", fetchError);
@@ -142,11 +143,11 @@ const TaskManager = () => {
     try {
       setLoading(true);
       setError("");
-      const response = await axios.get(buildApiUrl(`/api/project/getTaskById/${searchTaskId}`));
-      setTasks(response.data?.task ? [response.data.task] : []);
+      const task = await apiFetchTaskById(searchTaskId);
+      setTasks(task ? [task] : []);
     } catch (err) {
-      console.error("Error fetching task:", err.response?.data || err.message);
-      setError(err.response?.data?.message || "Failed to fetch task by ID.");
+      console.error("Error fetching task:", err.message);
+      setError(err.message || "Failed to fetch task by ID.");
       setTasks([]);
     } finally {
       setLoading(false);
@@ -161,15 +162,14 @@ const TaskManager = () => {
     try {
       setLoading(true);
       setError("");
-      const response = await axios.get(buildApiUrl(`/api/project/${projectId}/tasks`));
-      const list = Array.isArray(response.data) ? response.data : response.data?.tasks || [];
-      setTasks(list);
-      if (list.length === 0) {
+      const list = await apiFetchTasksByProjectId(projectId);
+      setTasks(Array.isArray(list) ? list : []);
+      if (!list?.length) {
         toast("No tasks found for this project.", { icon: "ℹ️" });
       }
     } catch (err) {
-      console.error("Error fetching tasks by project:", err.response?.data || err.message);
-      setError(err.response?.data?.message || err.response?.data?.error || "Failed to fetch tasks by project ID.");
+      console.error("Error fetching tasks by project:", err.message);
+      setError(err.message || "Failed to fetch tasks by project ID.");
       setTasks([]);
     } finally {
       setLoading(false);
@@ -178,13 +178,8 @@ const TaskManager = () => {
 
   const fetchReportByTaskId = async (taskId) => {
     try {
-      const response = await fetch(buildApiUrl(`/api/getreportbytaskid/${taskId}`));
-      if (!response.ok) {
-        throw new Error(`Error: ${response.status} ${response.statusText}`);
-      }
-
-      const reportData = await response.json();
-      const reportUrls = reportData?.report?.reportUrls;
+      const reportData = await fetchTaskReport(taskId);
+      const reportUrls = reportData?.reportUrls;
       if (Array.isArray(reportUrls)) {
         setTaskReports((prevReports) => ({
           ...prevReports,
@@ -206,7 +201,7 @@ const TaskManager = () => {
     try {
       setLoading(true);
       setError("");
-      await axios.post(buildApiUrl("/api/project/task"), {
+      await apiCreateTask({
         ...newTask,
         taskId: Number(newTask.taskId),
       });
@@ -224,8 +219,8 @@ const TaskManager = () => {
       setIsModalOpen(false);
       fetchAllTasks();
     } catch (err) {
-      console.error("Error creating task:", err.response?.data || err.message);
-      setError(err.response?.data?.message || "Failed to create a new task.");
+      console.error("Error creating task:", err.message);
+      setError(err.message || "Failed to create a new task.");
     } finally {
       setLoading(false);
     }
@@ -234,15 +229,15 @@ const TaskManager = () => {
   const updateTaskStatus = async () => {
     if (!selectedTask) return;
     try {
-      await axios.patch(buildApiUrl(`/api/project/task/${selectedTask._id}`), {
+      await updateTask(selectedTask._id, {
         ...selectedTask,
         status: newStatus,
       });
       setIsStatusModalOpen(false);
       fetchAllTasks();
     } catch (err) {
-      console.error("Error updating task:", err.response?.data || err.message);
-      setError(err.response?.data?.message || "Failed to update task.");
+      console.error("Error updating task:", err.message);
+      setError(err.message || "Failed to update task.");
     }
   };
 
@@ -261,14 +256,12 @@ const TaskManager = () => {
     formData.append("report", file);
 
     try {
-      const response = await axios.post(buildApiUrl(`/api/uploadtaskreport/${taskId}`), formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await uploadTaskReport(taskId, formData);
 
-      if (response.data?.report) {
+      if (response?.report) {
         toast.success("Report uploaded successfully!");
 
-        await axios.patch(buildApiUrl(`/api/project/task/${taskId}`), {
+        await updateTask(taskId, {
           status: "Submitted",
         });
 

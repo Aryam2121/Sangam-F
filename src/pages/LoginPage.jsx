@@ -46,14 +46,13 @@ const LoginPage = () => {
       }
 
       const user = data?.data?.user;
-      const accessToken = data?.data?.accessToken;
 
-      if (!user || !accessToken) {
+      if (!user) {
         throw new Error("Invalid login response");
       }
 
       const fcmToken = await generateFcmToken().catch(() => null);
-      await completeAuthSession({ login, accessToken, user, fcmToken });
+      await completeAuthSession({ login, user, fcmToken });
       toast.success("Welcome back!");
       navigate(homePathForRole(user.role));
     } catch (error) {

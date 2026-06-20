@@ -1,13 +1,12 @@
 import React, { useState } from "react";
 import { Pie } from "react-chartjs-2";
-import axios from "axios";
 import {
   Chart as ChartJS,
   ArcElement,
   Tooltip,
   Legend,
 } from "chart.js";
-import { buildApiUrl } from "../config/api";
+import { mlPredict } from "../services/sangamApi";
 
 
 // Register required components for ChartJS
@@ -68,28 +67,20 @@ const CostReductionPage = () => {
 
 
     try {
-      const response = await axios.post(
-        buildApiUrl('/predict_cost_reduction', import.meta.env.VITE_BACKEND_ML),
-        {
-          ...formData,
-          task_priority: Number(formData.task_priority),
-          task_complexity: Number(formData.task_complexity),
-          resources_allocated: Number(formData.resources_allocated),
-          communication_frequency: Number(formData.communication_frequency),
-          available_resources: Number(formData.available_resources),
-          historical_delay: Number(formData.historical_delay),
-          actual_completion_time: Number(formData.actual_completion_time),
-          expected_completion_time: Number(formData.expected_completion_time),
-          cost_estimate: Number(formData.cost_estimate),
-          actual_cost: Number(formData.actual_cost),
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      setResponseData(response.data);
+      const responseData = await mlPredict('/predict_cost_reduction', {
+        ...formData,
+        task_priority: Number(formData.task_priority),
+        task_complexity: Number(formData.task_complexity),
+        resources_allocated: Number(formData.resources_allocated),
+        communication_frequency: Number(formData.communication_frequency),
+        available_resources: Number(formData.available_resources),
+        historical_delay: Number(formData.historical_delay),
+        actual_completion_time: Number(formData.actual_completion_time),
+        expected_completion_time: Number(formData.expected_completion_time),
+        cost_estimate: Number(formData.cost_estimate),
+        actual_cost: Number(formData.actual_cost),
+      });
+      setResponseData(responseData);
     } catch (err) {
       setError(err.message);
     } finally {

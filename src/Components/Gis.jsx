@@ -33,7 +33,8 @@ function Gis() {
   const [weather, setWeather] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
 
-  const pathIndex = useRef(0); 
+  const pathIndex = useRef(0);
+  const watchIdRef = useRef(null);
   useEffect(() => {
     if (currentLocation) {
       const fetchWeatherData = async () => {
@@ -58,6 +59,13 @@ function Gis() {
   useEffect(() => {
     const paths = JSON.parse(localStorage.getItem('savedPaths')) || [];
     setSavedPaths(paths);
+  }, []);
+
+  useEffect(() => () => {
+    if (watchIdRef.current != null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
@@ -99,7 +107,10 @@ function Gis() {
     return totalDistance;
   };
 const startTracking = () => {
-    navigator.geolocation.watchPosition(
+    if (watchIdRef.current != null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
+    watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
         const newLocation = [position.coords.latitude, position.coords.longitude];
         setCurrentLocation(newLocation);
@@ -117,6 +128,10 @@ const startTracking = () => {
   };
 
   const stopTrackingAndSave = () => {
+    if (watchIdRef.current != null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
     const distance = calculateDistance(currentPath);
     saveNewPath(currentPath, distance);
     setCurrentPath([]);

@@ -1,52 +1,29 @@
-// src/VideoConference.jsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 const VideoConference = ({ roomID }) => {
+  const [error, setError] = useState('');
+
   useEffect(() => {
-    const loadZegoScript = () => {
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/@zegocloud/zego-uikit-prebuilt/zego-uikit-prebuilt.js';
-      script.async = true;
-      document.body.appendChild(script);
-      script.onload = () => {
-        const ZegoUIKitPrebuilt = window.ZegoUIKitPrebuilt;
-        const appID = Number(import.meta.env.VITE_appID);
-        const serverSecret = import.meta.env.VITE_serverSecret;
-        const userID = Math.floor(Math.random() * 10000) + '';
-        const userName = 'userName' + userID;
-        const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(appID, serverSecret, roomID, userID, userName);
+    const appID = import.meta.env.VITE_appID;
+    if (!appID) {
+      setError('Video conference is not configured. Set VITE_appID and configure server-side token generation.');
+      return;
+    }
 
-        const zp = ZegoUIKitPrebuilt.create(kitToken);
-        zp.joinRoom({
-          container: document.querySelector("#video-container"),
-          sharedLinks: [{
-            name: 'Personal link',
-            url: window.location.protocol + '//' + window.location.host  + window.location.pathname + '?roomID=' + roomID,
-          }],
-          scenario: {
-            mode: ZegoUIKitPrebuilt.VideoConference,
-          },
-          turnOnMicrophoneWhenJoining: true,
-          turnOnCameraWhenJoining: true,
-          showMyCameraToggleButton: true,
-          showMyMicrophoneToggleButton: true,
-          showAudioVideoSettingsButton: true,
-          showScreenSharingButton: true,
-          showTextChat: true,
-          showUserList: true,
-          maxUsers: 50,
-          layout: "Auto",
-          showLayoutButton: true,
-        });
-      };
-    };
-
-    loadZegoScript();
+    setError(
+      'Video conference requires server-side token generation. Do not expose Zego server secrets in the client bundle.'
+    );
   }, [roomID]);
 
-  return (
-    <div id="video-container" style={{ width: '100%', height: '100vh' }}></div>
-  );
+  if (error) {
+    return (
+      <div className="page flex min-h-[40vh] items-center justify-center rounded-3xl border border-amber-400/30 bg-amber-400/10 p-8 text-center text-amber-100">
+        <p>{error}</p>
+      </div>
+    );
+  }
+
+  return <div id="video-container" className="min-h-[60vh] w-full rounded-3xl bg-slate-900" />;
 };
 
 export default VideoConference;
