@@ -7,12 +7,6 @@ import { createAuthenticatedSocket } from '../utils/socketClient';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from './ui/PageHeader';
 
-const fallbackDepartments = [
-  { name: "Water", icon: "💧" },
-  { name: "Gas", icon: "⛽" },
-  { name: "Road Construction", icon: "🛣️" },
-];
-
 const iconByName = (name) => {
   const key = name?.toLowerCase() || "";
   if (key.includes("water")) return "💧";
@@ -36,8 +30,8 @@ const Discuss = () => {
   const displayName = userData?.fullName || userData?.username || "User";
   const socketRef = useRef(null);
 
-  const [departments, setDepartments] = useState(fallbackDepartments);
-  const [selectedDepartment, setSelectedDepartment] = useState(fallbackDepartments[0].name);
+  const [departments, setDepartments] = useState([]);
+  const [selectedDepartment, setSelectedDepartment] = useState("");
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -75,7 +69,7 @@ const Discuss = () => {
         }));
         if (mapped.length) {
           setDepartments(mapped);
-          setSelectedDepartment(mapped[0].name);
+          setSelectedDepartment((prev) => prev || mapped[0].name);
         }
       } catch (error) {
         console.error('Failed to load departments', error);
@@ -115,7 +109,7 @@ const Discuss = () => {
   }, [selectedDepartment, loadHistory]);
 
   const handleSendMessage = () => {
-    if (!newMessage.trim() || !socketRef.current) return;
+    if (!newMessage.trim() || !socketRef.current || !selectedDepartment) return;
     socketRef.current.emit('sendMessage', {
       department: selectedDepartment,
       content: newMessage.trim(),
@@ -133,6 +127,15 @@ const Discuss = () => {
       />
 
       <div className="flex min-h-[70vh] w-full min-w-0 overflow-hidden rounded-3xl border border-white/10 bg-white/5 text-gray-200 shadow-2xl backdrop-blur">
+        {departments.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
+            <p className="text-lg font-semibold text-white">No departments available</p>
+            <p className="mt-2 max-w-md text-sm text-slate-400">
+              Add departments from the admin panel to start department discussions.
+            </p>
+          </div>
+        ) : (
+        <>
         <aside className="hidden w-64 shrink-0 border-r border-white/10 bg-white/5 p-5 md:block lg:w-72">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Departments</h2>
           <ul className="space-y-2">
@@ -226,6 +229,8 @@ const Discuss = () => {
             </button>
           </div>
         </main>
+        </>
+        )}
       </div>
     </div>
   );

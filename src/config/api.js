@@ -93,13 +93,17 @@ export const apiFetch = async (path, options = {}) => {
 
   let response = await execute();
 
-  if (auth && retryOnUnauthorized && response.status === 401) {
+  if (auth && retryOnUnauthorized && response.status === 401 && !isGuestPath()) {
     try {
       await refreshAccessToken();
       response = await execute();
     } catch {
-      /* fall through */
+      /* refresh failed; handled below if still unauthorized */
     }
+  }
+
+  if (auth && response.status === 401) {
+    notifySessionExpired();
   }
 
   if (!parseJson) {
@@ -132,6 +136,18 @@ export const unwrapApiData = (payload) => {
 };
 
 let refreshInFlight = null;
+
+const isGuestPath = () => {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname;
+  return path === '/login' || path === '/register';
+};
+
+const notifySessionExpired = () => {
+  if (typeof window !== 'undefined' && !isGuestPath()) {
+    window.dispatchEvent(new CustomEvent('auth:session-expired'));
+  }
+};
 
 export const refreshAccessToken = async () => {
   if (refreshInFlight) {

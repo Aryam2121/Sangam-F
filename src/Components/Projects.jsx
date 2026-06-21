@@ -12,7 +12,9 @@ import {
   updateProject,
   fetchProjectById,
   createProjectMLModel,
+  fetchTasks,
 } from "../services/sangamApi";
+import { buildTaskProgressMap, getProjectProgressPercent } from "../utils/projectProgress";
 const COLORS = ["#0088FE", "#00C49F"];
 const role = localStorage.getItem('userRole');
 
@@ -25,17 +27,17 @@ const asProjectList = (payload) => {
 };
 
 
-const ProjectCard = ({ id, name, startDate, description, status, tasks = [], workers = [], onDelete, onEdit }) => {
+const ProjectCard = ({ id, name, startDate, description, status, tasks = [], workers = [], progressPct = 0, onDelete, onEdit }) => {
   const normalized = (status || "").toString().toLowerCase();
   const getStatusMeta = (s) => {
-    if (s === "completed") return { badge: "badge-completed", label: "Completed", pct: 100 };
-    if (s === "active") return { badge: "badge-active", label: "Active", pct: Math.floor(Math.random() * 30) + 55 };
-    if (s === "pending") return { badge: "badge-pending", label: "Pending", pct: Math.floor(Math.random() * 20) + 15 };
-    return { badge: "badge-active", label: s || "Unknown", pct: 0 };
+    if (s === "completed") return { badge: "badge-completed", label: "Completed" };
+    if (s === "active") return { badge: "badge-active", label: "Active" };
+    if (s === "pending") return { badge: "badge-pending", label: "Pending" };
+    return { badge: "badge-active", label: s || "Unknown" };
   };
 
-  const { badge, label, pct } = getStatusMeta(normalized);
-  const [percent] = useState(pct);
+  const { badge, label } = getStatusMeta(normalized);
+  const percent = progressPct;
   const navigate = useNavigate();
 
   return (
@@ -105,6 +107,7 @@ const ProjectCard = ({ id, name, startDate, description, status, tasks = [], wor
 
 const Projects = () => {
   const [projects, setProjects] = useState([]);
+  const [taskProgressMap, setTaskProgressMap] = useState({});
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredProjects, setFilteredProjects] = useState([]);
@@ -133,6 +136,9 @@ const Projects = () => {
   // Fetch Projects
   useEffect(() => {
     fetchProjects();
+    fetchTasks()
+      .then((tasks) => setTaskProgressMap(buildTaskProgressMap(Array.isArray(tasks) ? tasks : [])))
+      .catch(() => setTaskProgressMap({}));
   }, []);
 
 
@@ -400,6 +406,7 @@ const Projects = () => {
               status={project.status}
               tasks={project.taskIds}
               workers={project.workerIds || []}
+              progressPct={getProjectProgressPercent(project, taskProgressMap)}
               onDelete={handleDeleteProject}
               onEdit={handleEditProject}
             />

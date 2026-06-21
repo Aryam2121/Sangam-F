@@ -1,8 +1,8 @@
 self.FIREBASE_CONFIG = {
-  "apiKey": "",
+  "apiKey": "AIzaSyCpnRUv4FOfRzZowThODavq6k5ymoiikxQ",
   "authDomain": "sangam-d1e5d.firebaseapp.com",
   "projectId": "sangam-d1e5d",
   "storageBucket": "sangam-d1e5d.firebasestorage.app",
-  "messagingSenderId": "",
-  "appId": ""
+  "messagingSenderId": "663528087925",
+  "appId": "1:663528087925:web:d16678c31713dd451f333c"
 };

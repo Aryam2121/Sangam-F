@@ -1,4 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { refreshAccessToken } from '../config/api';
+
+const SESSION_EXPIRED_EVENT = 'auth:session-expired';
+
+const isGuestPath = () => {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname;
+  return path === '/login' || path === '/register';
+};
 
 const AuthContext = createContext();
 
@@ -26,6 +35,9 @@ export const AuthProvider = ({ children }) => {
     clearAutoLogout();
     localStorage.removeItem('user_data');
     localStorage.removeItem('userRole');
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith('cache:'))
+      .forEach((key) => localStorage.removeItem(key));
     setUserData(null);
     setAuthenticated(false);
     if (message) {
@@ -51,27 +63,53 @@ export const AuthProvider = ({ children }) => {
   }, [persistSession, setAutoLogout]);
 
   useEffect(() => {
-    try {
-      const storeData = JSON.parse(localStorage.getItem('user_data'));
+    const onSessionExpired = () => {
+      logout('Session has expired. Please log in again.');
+    };
 
-      if (storeData?.user && storeData?.expiry) {
-        const now = Date.now();
+    window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+  }, [logout]);
 
-        if (now < storeData.expiry) {
-          setUserData(storeData.user);
-          setAuthenticated(true);
-          setAutoLogout(storeData.expiry - now);
-        } else {
-          logout();
+  useEffect(() => {
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      try {
+        const storeData = JSON.parse(localStorage.getItem('user_data'));
+
+        if (storeData?.user && storeData?.expiry) {
+          const now = Date.now();
+
+          if (isGuestPath()) {
+            logout();
+          } else if (now < storeData.expiry) {
+            try {
+              await refreshAccessToken();
+              if (cancelled) return;
+              setUserData(storeData.user);
+              setAuthenticated(true);
+              setAutoLogout(storeData.expiry - now);
+            } catch {
+              if (!cancelled) logout();
+            }
+          } else {
+            logout();
+          }
         }
+      } catch {
+        logout();
+      } finally {
+        if (!cancelled) setIsReady(true);
       }
-    } catch {
-      logout();
-    } finally {
-      setIsReady(true);
-    }
+    };
 
-    return clearAutoLogout;
+    restoreSession();
+
+    return () => {
+      cancelled = true;
+      clearAutoLogout();
+    };
   }, [clearAutoLogout, logout, setAutoLogout]);
 
   const value = useMemo(

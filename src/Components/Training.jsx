@@ -1,38 +1,35 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchSeminars } from "../services/sangamApi";
+import { useAuth } from "../context/AuthContext";
 import seminar from "../assets/seminar.jpg";
 import meeting from "../assets/meeting.jpg";
 import news from "../assets/news.jpg";
 import videos from "../assets/videos.jpg";
 import PageHeader from "./ui/PageHeader";
+
+const DOCS_STORAGE_KEY = "sangam-training-docs";
+
+const loadStoredDocuments = () => {
+  try {
+    const raw = localStorage.getItem(DOCS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
 const TrainingPage = () => {
+  const { userData } = useAuth();
+  const uploaderName = userData?.fullName || userData?.username || "User";
   const [seminarCount, setSeminarCount] = useState(0);
   const [docSearch, setDocSearch] = useState("");
   const [pdfFile, setPdfFile] = useState(null);
-  const [documents, setDocuments] = useState([
-    {
-      name: "PDF product page presentation",
-      uploader: "Dobria Steph",
-      task: "Copywriting for all pages",
-      date: "Nov 04, 2022",
-      fileUrl: "/path/to/sample.pdf", // Replace with actual file path if needed
-    },
-    {
-      name: "Latest menu icons + instances",
-      uploader: "Dobria Steph",
-      task: "Copywriting for all pages",
-      date: "Nov 04, 2022",
-      fileUrl: "/path/to/sample2.pdf",
-    },
-    {
-      name: "Terms and Conditions + Privacy Policy",
-      uploader: "Julian Bildea",
-      task: "Implement online payment",
-      date: "Nov 01, 2022",
-      fileUrl: "/path/to/sample3.pdf",
-    },
-  ]);
+  const [documents, setDocuments] = useState(() => loadStoredDocuments());
+
+  useEffect(() => {
+    localStorage.setItem(DOCS_STORAGE_KEY, JSON.stringify(documents));
+  }, [documents]);
 
   const handleFileChange = (event) => {
     setPdfFile(event.target.files[0]);
@@ -40,20 +37,21 @@ const TrainingPage = () => {
 
   const handleFileUpload = () => {
     if (!pdfFile) return alert("Please select a PDF to upload!");
-
-    const fileUrl = URL.createObjectURL(pdfFile); // Creating a temporary URL for the file
-    setDocuments([
-      ...documents,
+    const fileUrl = URL.createObjectURL(pdfFile);
+    setDocuments((prev) => [
+      ...prev,
       {
+        id: `${Date.now()}-${pdfFile.name}`,
         name: pdfFile.name,
-        uploader: "Current User",
-        task: "New Task",
+        uploader: uploaderName,
+        task: "Training upload",
         date: new Date().toLocaleDateString(),
-        fileUrl, // Assigning the temporary URL for download
+        fileUrl,
       },
     ]);
-    setPdfFile(null); // Reset the file input after upload
+    setPdfFile(null);
   };
+
   const filteredDocuments = useMemo(() => {
     const q = docSearch.trim().toLowerCase();
     if (!q) return documents;
@@ -70,13 +68,14 @@ const TrainingPage = () => {
 
   useEffect(() => {
     fetchSeminars()
-      .then((list) => setSeminarCount(list.length))
+      .then((list) => setSeminarCount(Array.isArray(list) ? list.length : 0))
       .catch(() => setSeminarCount(0));
   }, []);
 
   const handleScheduleMeeting = () => {
-    navigate("/video-conference"); // Navigate to the VideoConferencing page
+    navigate("/video-conference");
   };
+
   return (
     <div className="page pb-10">
       <PageHeader
@@ -90,33 +89,29 @@ const TrainingPage = () => {
           {
             title: "Seminars",
             badge: seminarCount > 0 ? `${seminarCount} live` : null,
-            image: seminar, // Replace with the correct image source
+            image: seminar,
             description: "Join published seminars and learning links from your team.",
-            // duration: "Duration: 60 mins",
-            // onClick: () => window.location.href = "/seminars", // Replace with the actual URL
-            onClick: () =>navigate("/seminar"), // Replace with the actual URL
-
+            onClick: () => navigate("/seminar"),
           },
           {
             title: "Videos",
-            image: videos, // Replace with the correct image source
-            description: "Watch our expert-led video sessions anytime, anywhere.",
-            // duration: "Duration: 25 mins",
-            onClick: () =>navigate("/videos"), // Replace with the actual URL
+            image: videos,
+            description: "Watch seminar links and training videos from your organization.",
+            onClick: () => navigate("/videos"),
           },
           {
             title: "Schedule meeting",
-            image: meeting, // Replace with the correct image source
+            image: meeting,
             description: "Set up a meeting with our specialists for personalized advice.",
             duration: "Flexible Timings",
-            onClick: handleScheduleMeeting, // Custom function for scheduling meetings
+            onClick: handleScheduleMeeting,
           },
           {
             title: "Latest news",
-            image: news, // Replace with the correct image source
-            description: "Stay updated with the latest news and trends.",
+            image: news,
+            description: "Stay updated with city announcements and internal updates.",
             duration: "Updated Daily",
-            onClick: () =>navigate("/news"), // Replace with the actual URL
+            onClick: () => navigate("/announcements"),
           },
         ].map(({ title, image, description, duration, onClick, badge }, index) => (
           <div key={index} className="glass-card flex flex-col overflow-hidden p-0">
@@ -139,27 +134,16 @@ const TrainingPage = () => {
       </div>
 
       <div className="glass-panel p-6">
-        {/* Table Header */}
-        <div className="flex justify-between items-center mb-4">
-          <div className="text-sm">
-            Display <span className="font-semibold">5 documents</span>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-slate-400">
+            {filteredDocuments.length} document{filteredDocuments.length === 1 ? "" : "s"}
+            {documents.length === 0 && " — upload PDFs for your team (stored in this browser)"}
           </div>
-          <div className="flex items-center gap-4">
-            {/* Button to trigger the file input */}
-            <button
-              type="button"
-              onClick={() => document.getElementById("file-input").click()}
-              className="btn btn-primary"
-            >
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => document.getElementById("file-input").click()} className="btn btn-primary">
               Add New Document
             </button>
-            <input
-              type="file"
-              id="file-input"
-              accept="application/pdf"
-              onChange={handleFileChange}
-              style={{ display: "none" }} // Hidden input, triggered by the button
-            />
+            <input type="file" id="file-input" accept="application/pdf" onChange={handleFileChange} className="hidden" />
             <button type="button" onClick={handleFileUpload} className="btn btn-primary">
               Upload PDF
             </button>
@@ -173,7 +157,6 @@ const TrainingPage = () => {
           </div>
         </div>
 
-        {/* Table */}
         <table className="w-full text-left text-sm">
           <thead>
             <tr>
@@ -181,49 +164,31 @@ const TrainingPage = () => {
               <th className="py-3 px-4">Uploaded By</th>
               <th className="py-3 px-4">For Task</th>
               <th className="py-3 px-4">Date</th>
-              <th className="py-3 px-4">Options</th>
             </tr>
           </thead>
           <tbody>
             {filteredDocuments.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-8 text-center text-slate-400">
-                  {docSearch ? "No documents match your search." : "No documents yet."}
+                <td colSpan={4} className="py-8 text-center text-slate-400">
+                  {docSearch ? "No documents match your search." : "No documents uploaded yet."}
                 </td>
               </tr>
             ) : (
-            filteredDocuments.map((doc, index) => (
-              <tr key={index}>
-                <td className="py-3 px-4 flex items-center">
-                  <span className="mr-2 bg-red-500 w-6 h-6 flex items-center justify-center text-white rounded-full text-xs">
-                    PDF
-                  </span>
-                  <a href={doc.fileUrl} download className="text-blue-400 hover:text-blue-500">
-                    {doc.name}
-                  </a>
-                </td>
-                <td className="py-3 px-4">{doc.uploader}</td>
-                <td className="py-3 px-4">{doc.task}</td>
-                <td className="py-3 px-4">{doc.date}</td>
-                <td className="py-3 px-4">
-                  <button className="text-gray-400 hover:text-white">•••</button>
-                </td>
-              </tr>
-            )))}
+              filteredDocuments.map((doc) => (
+                <tr key={doc.id || doc.name}>
+                  <td className="py-3 px-4">
+                    <a href={doc.fileUrl} download={doc.name} className="text-cyan-300 hover:underline">
+                      {doc.name}
+                    </a>
+                  </td>
+                  <td className="py-3 px-4">{doc.uploader}</td>
+                  <td className="py-3 px-4">{doc.task}</td>
+                  <td className="py-3 px-4">{doc.date}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
-
-        {/* Pagination */}
-        <div className="flex justify-between items-center mt-4">
-          <p className="text-gray-400 text-sm">
-            Showing <span className="font-semibold">1 to 5</span> of 43
-          </p>
-          <div className="flex items-center gap-2">
-            <button className="py-1 px-3 rounded-lg bg-gray-700 hover:bg-gray-600">1</button>
-            <button className="py-1 px-3 rounded-lg bg-gray-700 hover:bg-gray-600">2</button>
-            <button className="py-1 px-3 rounded-lg bg-gray-700 hover:bg-gray-600">3</button>
-          </div>
-        </div>
       </div>
     </div>
   );

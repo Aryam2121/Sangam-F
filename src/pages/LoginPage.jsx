@@ -34,10 +34,15 @@ const LoginPage = () => {
     setError("");
 
     try {
+      const identifier = formData.email.trim();
+      const loginPayload = identifier.includes("@")
+        ? { email: identifier, password: formData.password }
+        : { username: identifier, password: formData.password };
+
       const { response, data } = await fetchJson("/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(loginPayload),
         credentials: "include",
       });
 
@@ -110,23 +115,23 @@ const LoginPage = () => {
           <div className="w-full border-t border-white/10" />
         </div>
         <div className="relative flex justify-center text-xs uppercase tracking-wider">
-          <span className="bg-slate-950 px-3 text-slate-500">or email</span>
+          <span className="bg-slate-950 px-3 text-slate-500">or sign in with email</span>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5 max-w-md">
-        <AuthField label="Email address" id="email">
+        <AuthField label="Email or username" id="email">
           <div className="relative">
             <BiEnvelope className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-500" />
             <input
-              type="email"
+              type="text"
               id="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
               className="auth-input pl-11"
-              placeholder="you@company.com"
-              autoComplete="email"
+              placeholder="you@company.com or username"
+              autoComplete="username"
               required
             />
           </div>

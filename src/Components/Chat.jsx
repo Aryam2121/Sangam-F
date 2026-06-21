@@ -33,7 +33,7 @@ const ChatApp = () => {
           .map((user) => ({
             name: user.fullName || user.username,
             avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName || user.username)}&background=0f172a&color=22d3ee&bold=true`,
-            status: 'Online',
+            status: user.isOnline ? "Online" : "Available",
           }));
         setProfiles(mapped);
         setSelectedProfile((prev) => prev || mapped[0] || null);

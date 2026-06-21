@@ -1,400 +1,370 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
-import { useNavigate } from "react-router-dom";
-import { FaComments, FaVideo, FaFilePdf, FaFileAlt, FaFileImage, FaCloudUploadAlt } from "react-icons/fa";
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from "react-router-dom";
+import { FaComments, FaVideo, FaCloudUploadAlt } from "react-icons/fa";
 import {
   fetchTasksByProjectId as apiFetchTasksByProjectId,
   fetchProjectResources,
   fetchProjectReport,
   uploadProjectReport,
+  fetchProjectById,
 } from "../services/sangamApi";
 
+const COLORS = ["#22d3ee", "#818cf8", "#34d399", "#fbbf24", "#f87171", "#fb7185"];
+
+const formatDepartments = (departments = []) =>
+  departments
+    .map((dept) => (typeof dept === "string" ? dept : dept?.name))
+    .filter(Boolean)
+    .join(", ") || "—";
+
+const formatRupee = (n) => `₹${Number(n || 0).toLocaleString("en-IN")}`;
+
+const buildTaskChartData = (tasks = []) => {
+  if (!tasks.length) return [];
+
+  const counts = { Completed: 0, "In Progress": 0, Pending: 0, Overdue: 0 };
+  const now = Date.now();
+
+  tasks.forEach((task) => {
+    const status = task.status || "Pending";
+    if (status === "Completed") counts.Completed += 1;
+    else if (status === "In Progress") counts["In Progress"] += 1;
+    else if (task.dueDate && new Date(task.dueDate).getTime() < now) counts.Overdue += 1;
+    else counts.Pending += 1;
+  });
+
+  return Object.entries(counts)
+    .filter(([, value]) => value > 0)
+    .map(([name, value]) => ({ name, value }));
+};
+
+const assignmentForProject = (resource, projectId) =>
+  resource.assignments?.find(
+    (a) => String(a.project?._id || a.project) === String(projectId)
+  );
+
+const buildResourceChartData = (resources = [], projectId) => {
+  if (!resources.length) return [];
+
+  let allocated = 0;
+  let available = 0;
+
+  resources.forEach((resource) => {
+    const assignment = assignmentForProject(resource, projectId);
+    const qty = assignment?.quantity || 0;
+    allocated += qty;
+    available += Math.max(0, (resource.stockLevel ?? 0) - qty);
+  });
+
+  const entries = [
+    { name: "Allocated to project", value: allocated },
+    { name: "Available stock", value: available },
+  ].filter((row) => row.value > 0);
+
+  return entries.length ? entries : [{ name: "No quantities", value: 1 }];
+};
+
+const ProgressChart = ({ title, data, emptyLabel }) => (
+  <div className="bg-gray-800 p-4 shadow-lg rounded-lg">
+    <h2 className="text-lg font-semibold mb-2">{title}</h2>
+    {data.length === 0 ? (
+      <p className="text-sm text-gray-400">{emptyLabel}</p>
+    ) : (
+      <div className="grid grid-cols-2 gap-4">
+        <ResponsiveContainer width="100%" height={150}>
+          <PieChart>
+            <Pie data={data} cx="50%" cy="50%" outerRadius={60} label dataKey="value">
+              {data.map((entry, index) => (
+                <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="flex flex-col justify-center gap-1">
+          {data.map((item) => (
+            <p key={item.name} className="text-gray-300 text-sm font-medium">
+              {item.name}: {item.value}
+            </p>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+);
+
 const ProjectDetails = () => {
-
   const [file, setFile] = useState(null);
-
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [ProjectId, setProjectId] = useState(null);
+  const [project, setProject] = useState(null);
+  const [projectError, setProjectError] = useState("");
   const [reports, setReports] = useState([]);
-  const [errorReports, setErrorReports] = useState("");
   const [activeTab, setActiveTab] = useState("Overview");
-  const [files, setFiles] = useState([]);
   const [resources, setResources] = useState([]);
   const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [loadingResources, setLoadingResources] = useState(false);
+  const [loadingProject, setLoadingProject] = useState(false);
   const [errortask, setTaskError] = useState("");
   const [errorres, setResError] = useState("");
-  const [pdfUrl, setPdfUrl] = useState(null);
-  const [documents, setDocuments] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [uploadStatus, setUploadStatus] = useState("");
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [filterTag, setFilterTag] = useState("All");
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [location, setLocation] = useState(null);
-  const [darkMode, setDarkMode] = useState(true);
 
-
-  const COLORS = ["#FF6384", "#36A2EB", "#FFCE56"];
   const navigate = useNavigate();
   const { projectId } = useParams();
-  const taskData = [
-    { name: "Available", value: 40 },
-    { name: "Allocated", value: 30 },
-    { name: "Total", value: 70 },
-  ];
-  const resourceData = [
-    { name: "Available", value: 40 },
-    { name: "Allocated", value: 30 },
-    { name: "Total", value: 70 },
-  ];
 
-  const fetchTasksByProjectId = async () => {
-    if (!projectId) {
-      console.log("No project ID found in the URL");
-      return;
-    }
+  const taskData = useMemo(() => buildTaskChartData(tasks), [tasks]);
+  const resourceData = useMemo(
+    () => buildResourceChartData(resources, projectId),
+    [resources, projectId]
+  );
 
-    try {
-      setLoading(true);
-      setTaskError("");
-      console.log(`Fetching tasks for project ID: ${projectId}`); // Add this log for debugging
-
-      const data = await apiFetchTasksByProjectId(projectId);
-      console.log("Tasks fetched aryaman successfully:", data);
-      setTasks(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.log(err)
-      console.error("Error fetching tasks:", err.message);
-      setTaskError(err.message || "Failed to fetch tasks.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchTasksByProjectId();
-  }, [projectId]);
-
-  const fetchResourcesByProjectId = async () => {
+  const loadProject = useCallback(async () => {
     if (!projectId) return;
     try {
-      setLoading(true);
+      setLoadingProject(true);
+      setProjectError("");
+      const data = await fetchProjectById(projectId);
+      setProject(data || null);
+    } catch (err) {
+      setProjectError(err.message || "Failed to load project.");
+      setProject(null);
+    } finally {
+      setLoadingProject(false);
+    }
+  }, [projectId]);
+
+  const loadTasks = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      setLoadingTasks(true);
+      setTaskError("");
+      const data = await apiFetchTasksByProjectId(projectId);
+      setTasks(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setTaskError(err.message || "Failed to fetch tasks.");
+    } finally {
+      setLoadingTasks(false);
+    }
+  }, [projectId]);
+
+  const loadResources = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      setLoadingResources(true);
       setResError("");
       const data = await fetchProjectResources(projectId);
       setResources(Array.isArray(data) ? data : []);
-      console.log(data, "hello vanshika")
     } catch (err) {
       setResError(err.message || "Failed to fetch resources.");
     } finally {
-      setLoading(false);
+      setLoadingResources(false);
     }
-  };
-  useEffect(() => {
-    fetchTasksByProjectId();
-    fetchResourcesByProjectId();
   }, [projectId]);
 
-  const TaskCard = ({ task }) => {
-    return (
-      <div className="task-card">
-        <h2>{task.title}</h2>
-        <p>{task.description}</p>
-        <p>Status: {task.status}</p>
-        <p>Due Date: {new Date(task.dueDate).toLocaleDateString()}</p>
-        <p>Assigned to: {task.assignedTo?.fullName}</p>
-      </div>
-    );
-  };
-
-  const ResourceCard = ({ resource }) => (
-    <div className="resource-card">
-      <h3>{resource.name}</h3>
-      <p>{resource.description}</p>
-      <p>Unit: {resource.unit}</p>
-      <p>Assigned Quantity: {resource.assignments[0]?.quantity || 0}</p>
-    </div>
-  );
-  console.log('Tasks state in JSX render:', tasks);
-  const fetchReports = async () => {
-    if (!projectId) {
-      console.error("No project ID found.");
-      return;
-    }
-
+  const loadReports = useCallback(async () => {
+    if (!projectId) return;
     try {
       const data = await fetchProjectReport(projectId);
-
-      console.log("API Response:", data);
-
-      if (Array.isArray(data?.reports)) {
-        setReports(data.reports);
-      } else if (Array.isArray(data?.reportUrls)) {
-        setReports(data.reportUrls);
-      } else if (data?.reportUrl) {
-        setReports([data.reportUrl]);
-      } else {
-        setReports([]);
-      }
-
-      console.log("Reports fetched successfully", data);
-    } catch (error) {
-      console.error('Error fetching reports:', error);
-      setReports([]);  // Ensure reports state is empty on error
+      if (Array.isArray(data?.reports)) setReports(data.reports);
+      else if (Array.isArray(data?.reportUrls)) setReports(data.reportUrls);
+      else if (data?.reportUrl) setReports([data.reportUrl]);
+      else setReports([]);
+    } catch {
+      setReports([]);
     }
-  };
+  }, [projectId]);
+
+  useEffect(() => {
+    loadProject();
+    loadTasks();
+    loadResources();
+    loadReports();
+  }, [loadProject, loadTasks, loadResources, loadReports]);
+
   const handleNavigateToAnamolyDet = () => {
-    if (!projectId) {
-      console.error("No project ID found in the URL.");
-      return;
-    }
-    console.log("Navigating to GIS Map for project ID:", projectId);
-    navigate(`/project/${projectId}/anamoly`);
+    if (projectId) navigate(`/project/${projectId}/anamoly`);
+  };
+
+  const handleNavigateToGisMap = () => {
+    if (projectId) navigate(`/project/${projectId}/gis`);
   };
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
-    if (selectedFile && selectedFile.type === 'image/png') {
+    if (selectedFile && selectedFile.type === "image/png") {
       setFile(selectedFile);
     } else {
-      setMessage('Please upload a PNG file.');
+      setMessage("Please upload a PNG file.");
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!file) {
-      setMessage('Please select a PNG file to upload.');
+      setMessage("Please select a PNG file to upload.");
       return;
     }
 
     setIsLoading(true);
-    setMessage('');
+    setMessage("");
 
     const formData = new FormData();
-    formData.append('report', file);
+    formData.append("report", file);
 
     try {
       const data = await uploadProjectReport(projectId, formData);
-
       if (data.success) {
         setMessage(`File uploaded successfully! Report URL: ${data.reportUrl}`);
+        loadReports();
       } else {
         setMessage(`Error: ${data.message}`);
       }
     } catch (error) {
       setMessage(`Error uploading file: ${error.message}`);
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
-  };
-  const filteredDocuments = documents.filter(
-    (doc) =>
-      (filterTag === "All" || doc.tags.includes(filterTag)) &&
-      doc.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  const conflictData = [
-    { id: 1, description: "Resource allocation exceeded the limit" },
-    { id: 2, description: "Task dependency mismatch in timeline" },
-    { id: 3, description: "Budget allocation not sufficient for the scope" },
-    { id: 4, description: "Project milestone not achieved on schedule" },
-    { id: 5, description: "Lack of communication between teams" },
-    { id: 6, description: "Unclear project requirements and scope changes" },
-  ];
-  const handleNavigateToGisMap = () => {
-    if (!projectId) {
-      console.error("No project ID found in the URL.");
-      return;
-    }
-    console.log("Navigating to GIS Map for project ID:", projectId);
-    // navigate(`/project/${projectId}/gis`);
-    navigate('/maps')
   };
 
-  const handleButtonClick = () => {
-    navigate("/conflictprediction"); // Navigates to the AboutPage
+  const budgetUtilization =
+    project?.budgetAllocated > 0
+      ? Math.round((project.budgetSpent / project.budgetAllocated) * 100)
+      : 0;
+
+  const tabContent = {
+    Overview: (
+      <div className="space-y-3 text-sm leading-relaxed text-gray-300">
+        <p>{project?.description || "No description provided for this project."}</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <p><span className="text-gray-500">Status:</span> <span className="capitalize">{project?.status || "—"}</span></p>
+          <p><span className="text-gray-500">Project admin:</span> {project?.projectAdmin || "—"}</p>
+          <p><span className="text-gray-500">Departments:</span> {formatDepartments(project?.departments)}</p>
+          <p><span className="text-gray-500">Workers:</span> {project?.workerIds?.length ?? 0}</p>
+          <p><span className="text-gray-500">Tasks:</span> {tasks.length}</p>
+          <p><span className="text-gray-500">Resources:</span> {project?.resources || "—"}</p>
+          {(project?.zone || project?.ward || project?.district) && (
+            <p className="sm:col-span-2">
+              <span className="text-gray-500">Location:</span>{" "}
+              {[project.zone, project.ward, project.district].filter(Boolean).join(" · ")}
+            </p>
+          )}
+        </div>
+      </div>
+    ),
+    Guidelines: (
+      <div className="space-y-3 text-sm text-gray-300">
+        <p>
+          Follow department SOPs, safety protocols, and environmental compliance for{" "}
+          <strong className="text-yellow-500">{project?.name || "this project"}</strong>.
+        </p>
+        <p>Assigned resource types: {project?.resources || "Not specified"}.</p>
+        <p>
+          All task updates must be logged before deadline. Escalate blockers via Workflow for cross-department issues.
+        </p>
+      </div>
+    ),
+    Timeline: (
+      <div className="space-y-3 text-sm text-gray-300">
+        <p>
+          <span className="text-gray-500">Start:</span>{" "}
+          {project?.startDate ? new Date(project.startDate).toLocaleDateString() : "—"}
+        </p>
+        <p>
+          <span className="text-gray-500">End:</span>{" "}
+          {project?.endDate ? new Date(project.endDate).toLocaleDateString() : "—"}
+        </p>
+        <p>
+          <span className="text-gray-500">Created:</span>{" "}
+          {project?.createdAt ? new Date(project.createdAt).toLocaleDateString() : "—"}
+        </p>
+        {tasks.length > 0 && (
+          <div>
+            <p className="mb-2 text-gray-500">Upcoming task deadlines</p>
+            <ul className="space-y-1">
+              {tasks
+                .filter((t) => t.dueDate && t.status !== "Completed")
+                .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+                .slice(0, 5)
+                .map((t) => (
+                  <li key={t._id}>
+                    {t.title} — {new Date(t.dueDate).toLocaleDateString()} ({t.status})
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    ),
+    Budget: (
+      <div className="space-y-3 text-sm text-gray-300">
+        <p><span className="text-gray-500">Allocated:</span> {formatRupee(project?.budgetAllocated)}</p>
+        <p><span className="text-gray-500">Spent:</span> {formatRupee(project?.budgetSpent)}</p>
+        <p><span className="text-gray-500">Utilization:</span> {budgetUtilization}%</p>
+        {project?.budgetAllocated > 0 && project?.budgetSpent > project?.budgetAllocated && (
+          <p className="text-rose-300">This project is over its allocated budget.</p>
+        )}
+      </div>
+    ),
   };
 
-  const handleButtonOnClick = () => {
-    navigate("/departmentprediction"); // Navigates to the AboutPage
-  };
-
-  const handleFileUpload = (e) => {
-    const uploadedFiles = Array.from(e.target.files);
-    setFiles((prevFiles) => [...prevFiles, ...uploadedFiles]);
-  };
-
-  const handleFileDownload = (file) => {
-    const url = URL.createObjectURL(file);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = file.name;
-    link.click();
-    URL.revokeObjectURL(url); // Cleanup
-  };
-
-  const addNewDocument = (newDoc) => {
-    setDocuments([...documents, newDoc]);
-    setShowUploadModal(false);
-  };
-
-
-  const handleStartMeeting = () => {
-    navigate("/video-conference"); // Navigate to the video conference page
-  };
-
-  const handleStartMessage = () => {
-    navigate("/chat"); // Navigate to the chat page
-  };
-
-
-  useEffect(() => {
-    const fetchReports = async () => {
-      if (!projectId) {
-        console.error("No project ID found.");
-        return;
-      }
-
-      try {
-        const data = await fetchProjectReport(projectId);
-
-        if (data?.reportUrl) {
-          setReports([data.reportUrl]);
-        } else if (Array.isArray(data?.reportUrls)) {
-          setReports(data.reportUrls);
-        } else if (Array.isArray(data?.reports)) {
-          setReports(data.reports);
-        } else {
-          console.warn("No report URL found in the report object", data);
-          setReports([]);
-        }
-
-        console.log("Reports fetched successfully", data);
-      } catch (error) {
-        console.error('Error fetching reports:', error);
-        setReports([]);  // Ensure reports state is empty on error
-      }
-    };
-
-    fetchReports();
-  }, [projectId]);
   return (
     <div className="h-screen bg-[#101114] text-gray-200 flex flex-col overflow-y-auto">
-      {/* Header */}
-      <div className="p-6 bg-gray-800 shadow-md">
-        <h1 className="text-3xl font-bold text-yellow-500">Project Details</h1>
+      <div className="p-6 bg-gray-800 shadow-md relative">
+        <p className="text-xs uppercase tracking-wider text-gray-500">Project</p>
+        <h1 className="text-3xl font-bold text-yellow-500">
+          {loadingProject ? "Loading…" : project?.name || "Project Details"}
+        </h1>
+        {projectError && <p className="mt-2 text-sm text-red-400">{projectError}</p>}
         <button
-        className="bg-gradient-to-r from-green-400 mt-16 to-blue-500 text-white py-3 px-6 rounded-full shadow-lg hover:scale-105 transition-transform duration-300 absolute top-6 right-6"
-        onClick={handleNavigateToAnamolyDet}
-      >
-        Go to Anomaly Detection
-      </button>
-
-        
+          className="bg-gradient-to-r from-green-400 to-blue-500 text-white py-3 px-6 rounded-full shadow-lg hover:scale-105 transition-transform duration-300 absolute top-6 right-6"
+          onClick={handleNavigateToAnamolyDet}
+        >
+          Go to Anomaly Detection
+        </button>
       </div>
 
-      {/* Main Content */}
       <div className="flex-grow grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
-        {/* Left Section */}
         <div className="flex flex-col space-y-6">
-          {/* Tabs Section */}
           <div className="bg-gray-800 p-4 shadow-lg rounded-lg">
-            <div className="flex justify-around mb-4">
+            <div className="flex flex-wrap gap-2 mb-4">
               {["Overview", "Guidelines", "Timeline", "Budget"].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`py-2 px-4 rounded ${activeTab === tab
-                      ? "bg-gray-700 text-yellow-500"
-                      : "bg-gray-800 text-gray-400"
-                    }`}
+                  className={`py-2 px-4 rounded text-sm ${
+                    activeTab === tab ? "bg-gray-700 text-yellow-500" : "bg-gray-800 text-gray-400"
+                  }`}
                 >
                   {tab}
                 </button>
               ))}
             </div>
-            <div>
-              {activeTab === "Overview" && (
-      <p>
-        The road construction project aims to enhance connectivity and support local development by constructing a 15-kilometer stretch of highway. It focuses on sustainable methods, efficient resource utilization, and adherence to safety and quality standards.
-      </p>
-    )}
-    {activeTab === "Guidelines" && (
-      <p>
-        The project will follow regulatory compliance, ensure minimal environmental impact, and maintain strict timelines. Safety measures for workers and the public will be prioritized throughout all phases.
-      </p>
-    )}
-    {activeTab === "Timeline" && (
-      <p>
-        The project is planned over six months, with phases including site preparation, road foundation, paving, and final inspection, ensuring timely and high-quality delivery.
-      </p>
-    )}
-    {activeTab === "Budget" && (
-      <p>
-        The estimated budget is INR 50 crore, allocated for land acquisition (40%), materials (35%), labor (20%), and contingencies (5%).
-      </p>
-    )}
-            </div>
-          </div>
-          {/* Task Progress */}
-          <div className="bg-gray-800 p-4 shadow-lg rounded-lg">
-            <h2 className="text-lg font-semibold mb-2">Task Progress</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <ResponsiveContainer width="100%" height={150}>
-                  <PieChart>
-                    <Pie
-                      data={taskData}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={60}
-                      label
-                      dataKey="value"
-                    >
-                      {taskData.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={COLORS[index % COLORS.length]}
-                        />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex flex-col justify-center">
-                {taskData.map((item, index) => (
-                  <p key={index} className="text-gray-300 font-medium">
-                    {item.name}: {item.value}
-                  </p>
-                ))}
-              </div>
-            </div>
+            <div>{project ? tabContent[activeTab] : <p className="text-gray-400">Loading project info…</p>}</div>
           </div>
 
-          {/* Tasks Cards Section */}
+          <ProgressChart title="Task Progress" data={taskData} emptyLabel="No tasks linked to this project yet." />
+
           <div className="bg-gray-800 p-4 shadow-lg rounded-lg">
             <h2 className="text-lg font-semibold mb-2">Tasks</h2>
-            {loading ? (
+            {loadingTasks ? (
               <p className="text-yellow-400">Loading tasks...</p>
             ) : errortask ? (
               <p className="text-red-400">{errortask}</p>
             ) : tasks.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {tasks.map((task) => (
-                  <div
-                    key={task._id}
-                    className="bg-gray-700 p-4 rounded shadow-md"
-                  >
-                    <h3 className="text-xl font-semibold text-yellow-500">{task.title}</h3>
+                  <div key={task._id} className="bg-gray-700 p-4 rounded shadow-md">
+                    <h3 className="text-lg font-semibold text-yellow-500">{task.title}</h3>
                     <p className="text-sm text-gray-300">{task.description}</p>
                     <p className="text-sm text-gray-400">Status: {task.status}</p>
                     <p className="text-sm text-gray-400">
-                      Due: {new Date(task.dueDate).toLocaleDateString()}
+                      Due: {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "—"}
                     </p>
                     <p className="text-sm text-gray-400">
-                      Assigned to: {task.assignedTo?.fullName || "Unassigned"}
+                      Assigned to: {task.assignedTo?.fullName || task.assignedTo?.username || "Unassigned"}
                     </p>
                   </div>
                 ))}
@@ -403,162 +373,110 @@ const ProjectDetails = () => {
               <p className="text-gray-400">No tasks available for this project.</p>
             )}
           </div>
-          <button className=" bg-yellow-500 m-4 p-2 shadow-lg rounded-lg" onClick={handleButtonClick}>Conflict Prediction</button>
-          <button className=" bg-red-500 m-4 p-2 shadow-lg rounded-lg" onClick={handleButtonOnClick}>Deprtment Conflict Prediction</button>
 
-
+          <div className="flex flex-wrap gap-3">
+            <button className="bg-yellow-500 p-2 shadow-lg rounded-lg" onClick={() => navigate("/conflictprediction")}>
+              Conflict Prediction
+            </button>
+            <button className="bg-red-500 p-2 shadow-lg rounded-lg" onClick={() => navigate("/departmentprediction")}>
+              Department Conflict Prediction
+            </button>
+          </div>
         </div>
 
-        {/* Right Section */}
         <div className="flex flex-col space-y-6">
-          {/* Location and Map Section */}
-          {/* Location Card */}
-          
           <div
-            className="bg-gray-800 p-6 rounded-lg shadow-lg cursor-pointer hover:bg-gray-700"
+            className="bg-gray-800 p-6 rounded-lg shadow-lg cursor-pointer hover:bg-gray-700 transition"
             onClick={handleNavigateToGisMap}
           >
-            <h2 className="text-xl font-semibold text-yellow-500">
-              Navigate to GIS Map
-            </h2>
+            <h2 className="text-xl font-semibold text-yellow-500">Navigate to GIS Map</h2>
             <p className="mt-2 text-sm text-gray-400">
-              Click this card to view GIS Map details.
+              Open the GIS view for {project?.name || "this project"}
+              {project?.location?.lat ? " with saved coordinates." : "."}
             </p>
-            {/* <button className=" bg-green-500 m-4 p-2 shadow-lg rounded-lg">Completed Paths</button>
-            <button className=" bg-blue-500 m-4 p-2 shadow-lg rounded-lg">Progress & Conflicts</button> */}
-
-          </div>  
-
-          {/* Resource Progress */}
-          <div className="bg-gray-800 p-4 shadow-lg rounded-lg">
-            <h2 className="text-lg font-semibold mb-2">Resource Progress</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <ResponsiveContainer width="100%" height={150}>
-                  <PieChart>
-                    <Pie
-                      data={resourceData}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={60}
-                      label
-                      dataKey="value"
-                    >
-                      {resourceData.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={COLORS[index % COLORS.length]}
-                        />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex flex-col justify-center">
-                {resourceData.map((item, index) => (
-                  <p key={index} className="text-gray-300 font-medium">
-                    {item.name}: {item.value}
-                  </p>
-                ))}
-              </div>
-            </div>
           </div>
-          {/* Resources Section */}
+
+          <ProgressChart
+            title="Resource Progress"
+            data={resourceData}
+            emptyLabel="No resources assigned to this project yet."
+          />
+
           <div className="bg-gray-800 p-4 shadow-lg rounded-lg">
             <h2 className="text-lg font-semibold mb-2">Resources</h2>
-            {loading ? (
+            {loadingResources ? (
               <p className="text-yellow-400">Loading resources...</p>
             ) : errorres ? (
               <p className="text-red-400">{errorres}</p>
             ) : resources.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {resources.map((resource) => (
-                  <div
-                    key={resource._id}
-                    className="bg-gray-700 p-4 rounded shadow-md"
-                  >
-                    <h3 className="text-xl font-semibold text-yellow-500">{resource.name}</h3>
-                    <p className="text-sm text-gray-300">{resource.description}</p>
-                    <p className="text-sm text-gray-400">Unit: {resource.unit}</p>
-                    <p className="text-sm text-gray-400">
-                      Assigned Quantity: {resource.assignments[0]?.quantity || 0}
-                    </p>
-                  </div>
-                ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {resources.map((resource) => {
+                  const assignment = assignmentForProject(resource, projectId);
+                  return (
+                    <div key={resource._id} className="bg-gray-700 p-4 rounded shadow-md">
+                      <h3 className="text-lg font-semibold text-yellow-500">{resource.name}</h3>
+                      <p className="text-sm text-gray-300">{resource.description}</p>
+                      <p className="text-sm text-gray-400">Unit: {resource.unit}</p>
+                      <p className="text-sm text-gray-400">
+                        Assigned: {assignment?.quantity ?? 0} · Stock: {resource.stockLevel ?? 0}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-gray-400">No resources available for this project.</p>
             )}
           </div>
 
-
-          {/* Action Buttons */}
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-3 gap-4">
             <button
-              className="bg-yellow-500 text-gray-800 p-6 rounded-lg text-2xl flex flex-col items-center justify-center shadow-lg hover:bg-yellow-400 transform hover:scale-105 transition-all duration-300"
-              onClick={handleStartMeeting}
+              className="bg-yellow-500 p-4 rounded-lg flex flex-col items-center shadow-lg hover:bg-yellow-400 transition"
+              onClick={() => navigate("/video-conference")}
             >
-              <FaVideo className="text-white mb-2" size={30} />
-              <span className="text-white font-medium">Start Meeting</span>
+              <FaVideo className="text-white mb-2" size={28} />
+              <span className="text-white text-sm font-medium">Start Meeting</span>
             </button>
             <button
-              className="bg-green-500 text-gray-800 p-6 rounded-lg text-2xl flex flex-col items-center justify-center shadow-lg hover:bg-green-400 transform hover:scale-105 transition-all duration-300"
-              onClick={handleStartMessage}
+              className="bg-green-500 p-4 rounded-lg flex flex-col items-center shadow-lg hover:bg-green-400 transition"
+              onClick={() => navigate("/chat")}
             >
-              <FaComments className="text-white mb-2" size={30} />
-              <span className="text-white font-medium">Start Message</span>
+              <FaComments className="text-white mb-2" size={28} />
+              <span className="text-white text-sm font-medium">Start Message</span>
             </button>
             <button
-              className="bg-blue-500 text-gray-800 p-6 rounded-lg text-2xl flex flex-col items-center justify-center shadow-lg hover:bg-blue-400 transform hover:scale-105 transition-all duration-300"
+              className="bg-blue-500 p-4 rounded-lg flex flex-col items-center shadow-lg hover:bg-blue-400 transition"
               onClick={() => setShowUploadModal(true)}
             >
-              <FaCloudUploadAlt className="text-white mb-2" size={30} />
-              <span className="text-white font-medium">Upload File</span>
+              <FaCloudUploadAlt className="text-white mb-2" size={28} />
+              <span className="text-white text-sm font-medium">Upload File</span>
             </button>
-
           </div>
         </div>
       </div>
 
-      {/* Modal for uploading documents */}
-      {/* Document Management Section */}
-      {/* Document Management Section */}
-      <div className="bg-gray-800 rounded-lg p-6 m-6 shadow-lg mb-6">
-        {/* Filters */}
-        <div className="flex justify-between items-center  mb-4">
-          <div className="flex items-center space-x-4 ">
-            <input
-              type="text"
-              placeholder="Search documents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-gray-700 text-white rounded-lg p-2"
-            />
-            <select
-              className="bg-gray-700 text-white rounded-lg p-2"
-              value={filterTag}
-              onChange={(e) => setFilterTag(e.target.value)}
-            >
-              <option>All</option>
-              <option>Marketing</option>
-              <option>Design</option>
-              <option>Policy</option>
-            </select>
-          </div>
-          <button
-            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center space-x-2"
-            onClick={() => setShowUploadModal(true)}
+      <div className="bg-gray-800 rounded-lg p-6 m-6 shadow-lg">
+        <div className="flex justify-between items-center mb-4">
+          <input
+            type="text"
+            placeholder="Search documents..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-gray-700 text-white rounded-lg p-2"
+          />
+          <select
+            className="bg-gray-700 text-white rounded-lg p-2"
+            value={filterTag}
+            onChange={(e) => setFilterTag(e.target.value)}
           >
-            <FaCloudUploadAlt /> <span>Add Document</span>
-          </button>
+            <option>All</option>
+            <option>Marketing</option>
+            <option>Design</option>
+            <option>Policy</option>
+          </select>
         </div>
-
-        {/* Document List */}
-
       </div>
 
-
-      {/* Reports Section */}
       <div className="bg-gray-800 rounded-lg p-6 m-6 shadow-lg mb-6">
         <h2 className="text-2xl text-white mb-4">Reports</h2>
         <table className="w-full text-left">
@@ -571,7 +489,9 @@ const ProjectDetails = () => {
           <tbody>
             {reports.length === 0 ? (
               <tr>
-                <td colSpan="2" className="py-4 text-center text-gray-400">No reports available</td>
+                <td colSpan="2" className="py-4 text-center text-gray-400">
+                  No reports available
+                </td>
               </tr>
             ) : (
               reports.map((reportUrl, index) => (
@@ -589,15 +509,13 @@ const ProjectDetails = () => {
         </table>
       </div>
 
-
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-96 shadow-lg">
             <h2 className="text-lg font-semibold mb-4">Upload New Document</h2>
-
             <form onSubmit={handleSubmit}>
               <div className="mb-4">
-                <label htmlFor="reportFile" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="report" className="block text-sm font-medium text-gray-300">
                   Choose PNG Report File
                 </label>
                 <input
@@ -606,33 +524,25 @@ const ProjectDetails = () => {
                   name="report"
                   accept=".png"
                   onChange={handleFileChange}
-                  className="mt-1 block w-full text-sm text-gray-900 border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                  className="mt-1 block w-full text-sm text-gray-200"
                 />
               </div>
-
               <button
                 type="submit"
                 className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 disabled:bg-gray-400"
                 disabled={isLoading}
               >
-                {isLoading ? 'Uploading...' : 'Upload'}
+                {isLoading ? "Uploading..." : "Upload"}
               </button>
             </form>
-
-            {/* Display message */}
             {message && (
-              <div
-                className={`mt-4 p-2 rounded-md text-center ${message.includes('success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}
-              >
+              <div className={`mt-4 p-2 rounded-md text-center text-sm ${message.includes("success") ? "text-green-300" : "text-red-300"}`}>
                 {message}
               </div>
             )}
-
-            {/* Close button */}
             <button
               onClick={() => setShowUploadModal(false)}
-              className="mt-4 text-white bg-red-600 rounded-lg px-4 py-2"
+              className="mt-4 text-white bg-red-600 rounded-lg px-4 py-2 w-full"
             >
               Close
             </button>

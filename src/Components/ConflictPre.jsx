@@ -11,7 +11,7 @@ import {
   Legend,
 } from "chart.js";
 import { mlPredict } from "../services/sangamApi";
-
+import { useMlPrefill, applyPrefillToForm } from "../hooks/useMlPrefill";
 // Register required components for Chart.js
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -32,6 +32,7 @@ const ConflictPredPage = () => {
   const [formData, setFormData] = useState(initialFields);
   const [result, setResult] = useState(null);
   const [chartData, setChartData] = useState(null);
+  const { projects, selectedProjectId, setSelectedProjectId, prefill, loading: prefillLoading } = useMlPrefill();
 
   // Handle field changes
   const handleChange = (e) => {
@@ -88,6 +89,21 @@ const ConflictPredPage = () => {
         <p className="page-kicker">Prediction</p>
         <h1 className="page-title mt-2">Conflict Prediction</h1>
         <p className="page-subtitle">Provide details to predict conflict likelihood and resolution.</p>
+      </div>
+
+      <div className="page-section mb-4 glass-panel p-4">
+        <p className="text-sm text-slate-400 mb-2">Auto-fill from project data</p>
+        <div className="flex flex-wrap gap-3">
+          <select className="field max-w-xs" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
+            <option value="">Select project…</option>
+            {projects.map((p) => (
+              <option key={p._id} value={p._id}>{p.name}</option>
+            ))}
+          </select>
+          <button type="button" className="btn btn-primary" disabled={!prefill || prefillLoading} onClick={() => applyPrefillToForm(prefill, setFormData)}>
+            Apply prefill
+          </button>
+        </div>
       </div>
 
       {/* Form Section */}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const getCache = (key, maxAgeMs) => {
   try {
@@ -17,7 +17,7 @@ const setCache = (key, value) => {
   try {
     localStorage.setItem(`cache:${key}`, JSON.stringify({ value, ts: Date.now() }));
   } catch {
-    // ignore cache write failures
+    /* ignore */
   }
 };
 
@@ -46,33 +46,35 @@ export const useStaleResource = ({
     };
   }, []);
 
+  const runFetch = useCallback(async (showLoading = false) => {
+    if (!enabled) return;
+    if (showLoading) setLoading(true);
+    setError("");
+    try {
+      const next = await fetcherRef.current();
+      if (!mounted.current) return next;
+      setData(next);
+      setCache(key, next);
+      return next;
+    } catch (err) {
+      if (!mounted.current) return null;
+      setError(err?.message || "Failed to fetch data");
+      throw err;
+    } finally {
+      if (mounted.current) setLoading(false);
+    }
+  }, [enabled, key]);
+
   useEffect(() => {
-    if (!enabled) return undefined;
-
-    const run = async () => {
-      setLoading((prev) => (data ? prev : true));
-      setError("");
-      try {
-        const next = await fetcherRef.current();
-        if (!mounted.current) return;
-        setData(next);
-        setCache(key, next);
-      } catch (err) {
-        if (!mounted.current) return;
-        setError(err?.message || "Failed to fetch data");
-      } finally {
-        if (mounted.current) setLoading(false);
-      }
-    };
-
-    run();
-
+    runFetch(!getCache(key, maxAgeMs));
     if (!refreshMs) return undefined;
-    const timer = setInterval(run, refreshMs);
+    const timer = setInterval(() => runFetch(false), refreshMs);
     return () => clearInterval(timer);
-  }, [enabled, key, maxAgeMs, refreshMs]); // Avoid fetch loop on changing function identities
+  }, [enabled, key, maxAgeMs, refreshMs, runFetch]);
 
-  return { data, setData, loading, error };
+  const refresh = useCallback(() => runFetch(true), [runFetch]);
+
+  return { data, setData, loading, error, refresh };
 };
 
 export default useStaleResource;

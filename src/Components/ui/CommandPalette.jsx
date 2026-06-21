@@ -3,14 +3,20 @@ import { useNavigate } from "react-router-dom";
 import { normalizeRole } from "../../utils/authRedirect";
 
 const baseItems = [
-  { path: "/", label: "Dashboard", roles: ["Main Admin", "Officer", "Worker"] },
-  { path: "/taskManager", label: "Task Manager", roles: ["Main Admin", "Officer", "Worker"] },
-  { path: "/projects", label: "Projects", roles: ["Main Admin", "Officer"] },
-  { path: "/resources", label: "Resources", roles: ["Main Admin", "Officer"] },
-  { path: "/training", label: "Training", roles: ["Main Admin", "Officer", "Worker"] },
-  { path: "/discussion", label: "Discussion", roles: ["Main Admin", "Officer", "Worker"] },
-  { path: "/BidSystem", label: "Bid System", roles: ["Main Admin", "Officer"] },
-  { path: "/profile", label: "Profile", roles: ["Main Admin", "Officer", "Worker"] },
+  { path: "/", label: "Dashboard", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
+  { path: "/city-kpi", label: "City KPIs", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
+  { path: "/city-map", label: "City Map", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
+  { path: "/workflow", label: "Workflow", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
+  { path: "/announcements", label: "Announcements", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
+  { path: "/taskManager", label: "Task Manager", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
+  { path: "/projects", label: "Projects", roles: ["Main Admin", "Department Admin", "Officer"] },
+  { path: "/resources", label: "Resources", roles: ["Main Admin", "Department Admin", "Officer"] },
+  { path: "/budget", label: "Budget", roles: ["Main Admin", "Department Admin"] },
+  { path: "/audit", label: "Audit Trail", roles: ["Main Admin", "Department Admin"] },
+  { path: "/training", label: "Training", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
+  { path: "/discussion", label: "Discussion", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
+  { path: "/BidSystem", label: "Bid System", roles: ["Main Admin", "Department Admin", "Officer"] },
+  { path: "/profile", label: "Profile", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
 ];
 
 const CommandPalette = ({ open, onClose }) => {

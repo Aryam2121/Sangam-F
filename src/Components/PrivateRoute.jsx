@@ -2,6 +2,8 @@ import React from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import LoadingScreen from "./ui/LoadingScreen";
+import AppShell from "./AppShell";
+import AuthenticatedEffects from "./AuthenticatedEffects";
 
 const PrivateRoute = () => {
   const { isAuthenticated, isReady } = useAuth();
@@ -14,7 +16,12 @@ const PrivateRoute = () => {
     return <Navigate to="/login" replace />;
   }
 
-  return <Outlet />;
+  return (
+    <AppShell>
+      <AuthenticatedEffects />
+      <Outlet />
+    </AppShell>
+  );
 };
 
 export default PrivateRoute;

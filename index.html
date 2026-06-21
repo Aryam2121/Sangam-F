@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0891b2" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>Sangam</title>
     <link rel="icon" type="image/svg+xml" href="/fav.png" height="50px" />
 
@@ -20,23 +22,6 @@
 
     <!-- Main React App -->
     <script type="module" src="/src/main.jsx"></script>
-
-    <!-- Google Maps API -->
-    <script type="module">
-      const googleMapsScript = document.createElement("script");
-      googleMapsScript.src = `https://maps.googleapis.com/maps/api/js?key=${
-        import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-      }&callback=initMap`;
-      googleMapsScript.async = true;
-      googleMapsScript.defer = true;
-      document.head.appendChild(googleMapsScript);
-    </script>
-
-    <script>
-      function initMap() {
-        console.log("Google Maps API loaded");
-      }
-    </script>
 
     <!-- Google Maps Web Components -->
     <script

@@ -1,24 +1,26 @@
-// components/GoogleMapsLoader.jsx
 import { useEffect } from "react";
+
+const SCRIPT_ID = "sangam-google-maps";
 
 const GoogleMapsLoader = () => {
   useEffect(() => {
-    // Create the script tag for the Google Maps API
-    const googleMapsScript = document.createElement("script");
-    googleMapsScript.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`;
-    googleMapsScript.async = true;
-    googleMapsScript.defer = true;
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim();
+    if (!apiKey) return undefined;
 
-    // Append the script to the document head
-    document.head.appendChild(googleMapsScript);
+    if (window.google?.maps) return undefined;
+    if (document.getElementById(SCRIPT_ID)) return undefined;
 
-    // Cleanup: Remove the script when the component is unmounted
-    return () => {
-      document.head.removeChild(googleMapsScript);
-    };
+    const script = document.createElement("script");
+    script.id = SCRIPT_ID;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&loading=async`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+
+    return undefined;
   }, []);
 
-  return null; // No UI to render
+  return null;
 };
 
 export default GoogleMapsLoader;

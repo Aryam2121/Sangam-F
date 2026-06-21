@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pie } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -7,6 +7,7 @@ import {
   Legend,
 } from "chart.js";
 import { mlPredict } from "../services/sangamApi";
+import { useMlPrefill, applyPrefillToForm } from "../hooks/useMlPrefill";
 
 
 // Register required components for ChartJS
@@ -35,21 +36,46 @@ const CostReductionPage = () => {
   const [responseData, setResponseData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const { projects, selectedProjectId, setSelectedProjectId, prefill, loading: prefillLoading } = useMlPrefill();
 
+  const optimizationPct = useMemo(() => {
+    if (!responseData) return null;
+    const raw =
+      responseData.cost_reduction_potential ??
+      responseData.optimization_potential ??
+      responseData.probability ??
+      responseData.predicted_reduction;
+    if (typeof raw !== "number" || Number.isNaN(raw)) return null;
+    return Math.round(raw <= 1 ? raw * 100 : raw);
+  }, [responseData]);
 
-  // Pie chart data
-  const pieData = {
-    labels: ["Optimization Potential", "Other Factors"],
-    datasets: [
-      {
-        label: "Probability of Cost Optimization",
-        data: [30, 70],
-        backgroundColor: ["#3b82f6", "#6b7280"], // Blue and Gray
-        hoverBackgroundColor: ["#2563eb", "#4b5563"],
-        borderWidth: 1,
-      },
-    ],
-  };
+  const pieData = useMemo(() => {
+    if (optimizationPct == null) {
+      return {
+        labels: ["Run prediction"],
+        datasets: [{ label: "Cost optimization", data: [1], backgroundColor: ["#374151"], borderWidth: 0 }],
+      };
+    }
+    return {
+      labels: ["Optimization Potential", "Other Factors"],
+      datasets: [
+        {
+          label: "Probability of Cost Optimization",
+          data: [optimizationPct, Math.max(0, 100 - optimizationPct)],
+          backgroundColor: ["#3b82f6", "#6b7280"],
+          hoverBackgroundColor: ["#2563eb", "#4b5563"],
+          borderWidth: 1,
+        },
+      ],
+    };
+  }, [optimizationPct]);
+
+  const budgetStatus = useMemo(() => {
+    const estimate = Number(formData.cost_estimate);
+    const actual = Number(formData.actual_cost);
+    if (!estimate || !actual) return null;
+    return actual > estimate ? "over" : "under";
+  }, [formData.cost_estimate, formData.actual_cost]);
 
 
   // Handle Form Changes
@@ -95,6 +121,21 @@ const CostReductionPage = () => {
         <p className="page-kicker">Prediction</p>
         <h1 className="page-title mt-2">Cost Reduction Dashboard</h1>
         <p className="page-subtitle">Enter project signals to estimate optimization potential.</p>
+      </div>
+
+      <div className="glass-panel mb-6 p-4">
+        <p className="text-sm text-slate-400 mb-2">Auto-fill from project</p>
+        <div className="flex flex-wrap gap-3">
+          <select className="field max-w-xs" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
+            <option value="">Select project…</option>
+            {projects.map((p) => (
+              <option key={p._id} value={p._id}>{p.name}</option>
+            ))}
+          </select>
+          <button type="button" className="btn btn-primary" disabled={!prefill || prefillLoading} onClick={() => applyPrefillToForm(prefill, setFormData)}>
+            Apply prefill
+          </button>
+        </div>
       </div>
 
       <div className="mx-auto w-full max-w-7xl">
@@ -199,13 +240,28 @@ const CostReductionPage = () => {
               Project Budget Status
             </h3>
             <div className="flex space-x-4">
-              <button className="bg-red-600 hover:bg-red-700 text-white py-3 px-5 rounded-lg font-semibold transition duration-300 w-full">
+              <button
+                type="button"
+                className={`py-3 px-5 rounded-lg font-semibold transition duration-300 w-full ${
+                  budgetStatus === "over" ? "bg-red-600 text-white" : "bg-gray-700 text-gray-400"
+                }`}
+                disabled
+              >
                 Overbudget
               </button>
-              <button className="bg-green-600 hover:bg-green-700 text-white py-3 px-5 rounded-lg font-semibold transition duration-300 w-full">
+              <button
+                type="button"
+                className={`py-3 px-5 rounded-lg font-semibold transition duration-300 w-full ${
+                  budgetStatus === "under" ? "bg-green-600 text-white" : "bg-gray-700 text-gray-400"
+                }`}
+                disabled
+              >
                 Underbudget
               </button>
             </div>
+            {!budgetStatus && (
+              <p className="mt-4 text-center text-sm text-slate-400">Enter cost estimate and actual cost to compare budget status.</p>
+            )}
           </div>
 
 
