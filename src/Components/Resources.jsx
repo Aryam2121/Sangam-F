@@ -13,7 +13,9 @@ import {
   BiLayer,
   BiEdit,
 } from "react-icons/bi";
-import { isMainAdmin } from "../utils/rolePermissions";
+import { isManagerRole } from "../utils/rolePermissions";
+import PageHeader from "./ui/PageHeader";
+import { StatCard } from "./ui/FeatureUi";
 import {
   fetchResources as apiFetchResources,
   createResource as apiCreateResource,
@@ -35,7 +37,8 @@ const truncateId = (id = "") => (id.length > 10 ? `${id.slice(0, 6)}…${id.slic
 const mapResource = (resource) => {
   const assignment = resource.assignments?.[0];
   const allocated = assignment?.quantity || 0;
-  const capacity = 100;
+  const stock = resource.stockLevel ?? 0;
+  const capacity = stock > 0 ? stock : Math.max(allocated, 1);
 
   return {
     id: resource._id,
@@ -188,7 +191,7 @@ const Modal = ({ open, title, subtitle, onClose, children }) => (
 
 const Resources = () => {
   const navigate = useNavigate();
-  const isAdmin = isMainAdmin(localStorage.getItem("userRole"));
+  const canManage = isManagerRole(localStorage.getItem("userRole"));
   const [projectId, setProjectId] = useState("");
   const [resourceId, setResourceId] = useState("");
   const [nameQuery, setNameQuery] = useState("");
@@ -396,52 +399,41 @@ const Resources = () => {
   };
 
   return (
-    <div className="page pb-12">
-      {/* Header */}
-      <div className="glass-panel mb-6 flex flex-wrap items-center justify-between gap-4 p-6">
-        <div>
-          <p className="page-kicker">Inventory</p>
-          <h1 className="page-title mt-2">Resources Management</h1>
-          <p className="page-subtitle">
-            Manage materials, track allocation, and assign resources to projects.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={resetFilters} className="btn">
-            <BiRefresh className="text-lg" />
-            Refresh
-          </button>
-          {isAdmin && (
-            <>
-              <button type="button" onClick={() => setIsCreateModalOpen(true)} className="btn btn-primary">
-                <BiPlus className="text-lg" />
-                Create
-              </button>
-              <button type="button" onClick={() => setIsAssignModalOpen(true)} className="btn">
-                <BiLink className="text-lg" />
-                Assign
-              </button>
-              <button type="button" onClick={() => navigate("/reallocate")} className="btn">
-                <BiLayer className="text-lg" />
-                Allocator
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {[
-          { label: "Total Resources", value: stats.total, accent: "text-cyan-200" },
-          { label: "Assigned", value: stats.assigned, accent: "text-emerald-200" },
-          { label: "Available", value: stats.available, accent: "text-amber-200" },
-        ].map((item) => (
-          <div key={item.label} className="glass-card p-5">
-            <p className="text-xs uppercase tracking-[0.25em] text-slate-400">{item.label}</p>
-            <p className={`mt-3 text-3xl font-semibold ${item.accent}`}>{item.value}</p>
+    <div className="page-stack pb-12">
+      <PageHeader
+        kicker="Inventory"
+        title="Resources Management"
+        subtitle="Manage materials, track allocation, and assign resources to projects"
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={resetFilters} className="btn">
+              <BiRefresh className="text-lg" />
+              Refresh
+            </button>
+            {canManage && (
+              <>
+                <button type="button" onClick={() => setIsCreateModalOpen(true)} className="btn btn-primary">
+                  <BiPlus className="text-lg" />
+                  Create
+                </button>
+                <button type="button" onClick={() => setIsAssignModalOpen(true)} className="btn">
+                  <BiLink className="text-lg" />
+                  Assign
+                </button>
+                <button type="button" onClick={() => navigate("/reallocate")} className="btn">
+                  <BiLayer className="text-lg" />
+                  Allocator
+                </button>
+              </>
+            )}
           </div>
-        ))}
+        }
+      />
+
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard label="Total resources" value={stats.total} tone="cyan" />
+        <StatCard label="Assigned" value={stats.assigned} tone="emerald" />
+        <StatCard label="Available" value={stats.available} tone="amber" />
       </div>
 
       {/* Search & filters */}
@@ -557,7 +549,7 @@ const Resources = () => {
               ? "Try adjusting your search or filters."
               : "Create your first resource to get started."}
           </p>
-          {isAdmin && (
+          {canManage && (
             <button type="button" onClick={() => setIsCreateModalOpen(true)} className="btn btn-primary">
               <BiPlus />
               Create Resource
@@ -571,7 +563,7 @@ const Resources = () => {
               key={resource.id}
               resource={resource}
               highlighted={resource.assignedTo === highlightedProjectId}
-              canManage={isAdmin}
+              canManage={canManage}
               onDelete={deleteResource}
               onAssign={openAssignFor}
               onEdit={openEditFor}

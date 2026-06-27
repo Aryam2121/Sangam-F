@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
   createWorkflowRequest,
@@ -20,9 +21,10 @@ import {
 } from "../Components/ui/FeatureUi";
 import { useAuth } from "../context/AuthContext";
 import { useI18n } from "../context/I18nContext";
-import { isMainAdmin } from "../utils/rolePermissions";
+import { isAdminRole } from "../utils/rolePermissions";
 
 const WorkflowPage = () => {
+  const navigate = useNavigate();
   const { userData } = useAuth();
   const { t } = useI18n();
   const [departments, setDepartments] = useState([]);
@@ -32,6 +34,7 @@ const WorkflowPage = () => {
     toDepartment: "",
     priority: "medium",
   });
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     fetchDepartments()
@@ -39,9 +42,12 @@ const WorkflowPage = () => {
       .catch(() => setDepartments([]));
   }, []);
 
-  const fetcher = useCallback(() => fetchWorkflowRequests(), []);
+  const fetcher = useCallback(
+    () => fetchWorkflowRequests(statusFilter === "all" ? {} : { status: statusFilter }),
+    [statusFilter]
+  );
   const { data, loading, refresh } = useStaleResource({
-    key: "workflow-requests",
+    key: `workflow-requests:${statusFilter}`,
     fetcher,
     maxAgeMs: 20_000,
     refreshMs: 45_000,
@@ -88,13 +94,35 @@ const WorkflowPage = () => {
         title={t("workflow")}
         subtitle="Cross-department requests, approvals & SLA escalation"
         actions={
-          isMainAdmin(userData?.role) ? (
-            <button type="button" className="btn" onClick={handleEscalate}>
-              Run SLA escalation
+          <>
+            <button type="button" className="btn" onClick={() => navigate("/approvals")}>
+              Approvals inbox
             </button>
-          ) : null
+            {isAdminRole(userData?.role) ? (
+              <button type="button" className="btn" onClick={handleEscalate}>
+                Run SLA escalation
+              </button>
+            ) : null}
+          </>
         }
       />
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {["all", "pending", "in_review", "approved", "rejected"].map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setStatusFilter(s)}
+            className={`rounded-xl px-3 py-1.5 text-xs font-medium capitalize transition ${
+              statusFilter === s
+                ? "bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-400/30"
+                : "text-slate-400 hover:bg-white/5"
+            }`}
+          >
+            {s.replace("_", " ")}
+          </button>
+        ))}
+      </div>
 
       <SectionCard title="New request" subtitle="Route work to another department">
         <form onSubmit={handleCreate} className="grid gap-3 sm:grid-cols-2">

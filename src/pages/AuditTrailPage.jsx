@@ -24,7 +24,7 @@ const AuditTrailPage = () => {
   );
   const statsFetcher = useCallback(() => fetchAuditStats(), []);
 
-  const { data: trailData, loading } = useStaleResource({
+  const { data: trailData, loading, refresh } = useStaleResource({
     key: `audit:${JSON.stringify(filters)}`,
     fetcher: trailFetcher,
     maxAgeMs: 30_000,
@@ -54,7 +54,7 @@ const AuditTrailPage = () => {
         </div>
       )}
 
-      <FilterBar applyLabel="Refresh trail">
+      <FilterBar onApply={refresh} applyLabel="Refresh trail">
         <Field label="Entity type">
           <select className={selectClass} value={filters.entityType} onChange={(e) => setFilters({ ...filters, entityType: e.target.value })}>
             <option value="">All entities</option>

@@ -1,4 +1,4 @@
-import { BiBookAlt, BiHome, BiStats, BiTask, BiTrain, BiCurrentLocation, BiMessageRounded, BiGlobe, BiTransfer, BiMoney, BiShield, BiBroadcast, BiPlug } from "react-icons/bi";
+import { BiBookAlt, BiHome, BiStats, BiTask, BiTrain, BiCurrentLocation, BiMessageRounded, BiGlobe, BiTransfer, BiMoney, BiShield, BiBroadcast, BiPlug, BiCheckCircle, BiChat } from "react-icons/bi";
 
 export const SHARED_NAV = {
   dashboard: { to: "/", icon: BiHome, label: "Dashboard", match: (p) => p === "/" || p === "/dashboard" },
@@ -8,6 +8,8 @@ export const SHARED_NAV = {
   resources: { to: "/resources", icon: BiStats, label: "Resources" },
   training: { to: "/training", icon: BiTrain, label: "Training" },
   discussion: { to: "/discussion", icon: BiMessageRounded, label: "Discussion" },
+  chat: { to: "/chat", icon: BiChat, label: "Messages" },
+  approvals: { to: "/approvals", icon: BiCheckCircle, label: "Approvals" },
   cityMap: { to: "/city-map", icon: BiGlobe, label: "City Map" },
   workflow: { to: "/workflow", icon: BiTransfer, label: "Workflow" },
   budget: { to: "/budget", icon: BiMoney, label: "Budget", adminOnly: true },
@@ -32,6 +34,8 @@ export const navForRole = (role) => {
     SHARED_NAV.resources,
     SHARED_NAV.training,
     SHARED_NAV.discussion,
+    SHARED_NAV.chat,
+    SHARED_NAV.approvals,
     SHARED_NAV.cityMap,
     SHARED_NAV.workflow,
     SHARED_NAV.announcements,

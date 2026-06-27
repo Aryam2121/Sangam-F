@@ -12,12 +12,12 @@ import {
 } from "../Components/ui/FeatureUi";
 import { useI18n } from "../context/I18nContext";
 import { useAuth } from "../context/AuthContext";
-import { isMainAdmin } from "../utils/rolePermissions";
+import { isAdminRole, isManagerRole } from "../utils/rolePermissions";
 
 const AnnouncementsPage = () => {
   const { t } = useI18n();
   const { userData } = useAuth();
-  const canManage = isMainAdmin(userData?.role) || userData?.role === "Officer";
+  const canManage = isManagerRole(userData?.role);
   const [form, setForm] = useState({ title: "", body: "", department: "", pinned: false });
 
   const fetcher = useCallback(() => fetchAnnouncements(), []);
@@ -70,7 +70,7 @@ const AnnouncementsPage = () => {
             {a.authorName} · {a.department || "City-wide"} · {new Date(a.createdAt).toLocaleDateString()}
           </p>
         </div>
-        {isMainAdmin(userData?.role) && (
+        {isAdminRole(userData?.role) && (
           <button type="button" className="btn h-fit text-xs text-rose-200" onClick={() => handleDelete(a._id)}>
             Delete
           </button>

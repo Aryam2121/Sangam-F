@@ -1,8 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Modal from "react-modal";
 import { BiPlus, BiSearch, BiRefresh } from "react-icons/bi";
-import { toast } from "react-toastify";
+import toast from "react-hot-toast";
 import PageHeader from "./ui/PageHeader";
+import {
+  EmptyState,
+  Field,
+  inputClass,
+  selectClass,
+} from "./ui/FeatureUi";
 import {
   deleteTask as apiDeleteTask,
   fetchTasks,
@@ -15,7 +21,7 @@ import {
   updateTask,
   uploadTaskReport,
 } from "../services/sangamApi";
-import { BiTrash } from "react-icons/bi";
+import { isManagerRole } from "../utils/rolePermissions";
 
 const customModalStyles = {
   content: {
@@ -26,16 +32,17 @@ const customModalStyles = {
     marginRight: "-50%",
     transform: "translate(-50%, -50%)",
     width: "90%",
-    maxWidth: "500px",
-    background: "#2d2d2d",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: "10px",
-    padding: "20px",
+    maxWidth: "520px",
+    background: "rgba(15, 23, 42, 0.98)",
+    color: "#e2e8f0",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: "16px",
+    padding: "24px",
   },
   overlay: {
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
     zIndex: 10000,
+    backdropFilter: "blur(4px)",
   },
 };
 
@@ -63,6 +70,7 @@ const TaskManager = () => {
   const [names, setNames] = useState([]);
 
   const role = localStorage.getItem("userRole");
+  const canManageTasks = isManagerRole(role);
 
   const [newTask, setNewTask] = useState({
     taskId: "",
@@ -165,7 +173,7 @@ const TaskManager = () => {
       const list = await apiFetchTasksByProjectId(projectId);
       setTasks(Array.isArray(list) ? list : []);
       if (!list?.length) {
-        toast("No tasks found for this project.", { icon: "ℹ️" });
+        toast("No tasks found for this project.");
       }
     } catch (err) {
       console.error("Error fetching tasks by project:", err.message);
@@ -328,7 +336,7 @@ const TaskManager = () => {
         title="Task Manager"
         subtitle="Track tasks, update statuses, and upload reports in one place."
         actions={
-          (role === "Main Admin" || role === "Officer") && (
+          canManageTasks && (
             <button type="button" onClick={() => setIsModalOpen(true)} className="btn btn-primary">
               <BiPlus className="text-lg" />
               Add Task
@@ -540,36 +548,35 @@ const TaskManager = () => {
                         type="file"
                         accept=".png"
                         onChange={(e) => setFile(e.target.files[0])}
-                        className="block w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
+                        className="block w-full rounded-xl border border-white/10 bg-slate-900/70 p-2 text-sm text-slate-200"
                       />
                       <button
                         onClick={(e) => handleFileUpload(e, task._id)}
                         disabled={isUploading}
-                        className="rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-60"
+                        className="btn btn-primary"
                       >
                         {isUploading ? "Uploading..." : "Upload"}
                       </button>
                     </>
                   )}
 
-                  {(role === "Main Admin" || role === "Officer") && (
-                    <button
-                      onClick={() => {
-                        setSelectedTask(task);
-                        setNewStatus(task.status || "Pending");
-                        setIsStatusModalOpen(true);
-                      }}
-                      className="rounded-md bg-yellow-600 px-4 py-2 text-white hover:bg-yellow-700"
-                    >
-                      Update Status
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTask(task);
+                      setNewStatus(task.status || "Pending");
+                      setIsStatusModalOpen(true);
+                    }}
+                    className="btn"
+                  >
+                    Update Status
+                  </button>
 
                   <button type="button" onClick={() => fetchReportByTaskId(task._id)} className="btn">
                     View Reports
                   </button>
 
-                  {role === "Main Admin" && (
+                  {canManageTasks && (
                     <button
                       type="button"
                       onClick={() => handleDeleteTask(task._id)}
@@ -583,9 +590,14 @@ const TaskManager = () => {
             );
           })
         ) : (
-          <div className="glass-panel col-span-full p-12 text-center text-slate-400">
-            {filterText || searchTaskId || projectId ? "No tasks match your search." : "No tasks available."}
-          </div>
+          <EmptyState
+            title="No tasks"
+            description={
+              filterText || searchTaskId || projectId
+                ? "No tasks match your filters."
+                : "Create a task or adjust filters to see work items."
+            }
+          />
         )}
       </div>
 
@@ -608,7 +620,7 @@ const TaskManager = () => {
             value={newTask.taskId}
             onChange={(e) => setNewTask({ ...newTask, taskId: e.target.value })}
             required
-            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
+            className={`${inputClass} mb-4`}
           />
           <input
             type="text"
@@ -616,14 +628,14 @@ const TaskManager = () => {
             value={newTask.title}
             onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
             required
-            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
+            className={`${inputClass} mb-4`}
           />
           <textarea
             placeholder="Description"
             value={newTask.description}
             onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
             required
-            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
+            className={`${inputClass} mb-4`}
           />
 
           <select
@@ -633,7 +645,7 @@ const TaskManager = () => {
               const selectedValue = e.target.value;
               setNewTask((prevTask) => ({ ...prevTask, assignedTo: selectedValue }));
             }}
-            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-white"
+            className={`${selectClass} mb-4`}
           >
             <option value="">{data.length === 0 ? "Loading..." : "Assigned To (User ID)"}</option>
             {(Array.isArray(data) ? data : []).map((item) => (
@@ -650,7 +662,7 @@ const TaskManager = () => {
               const selectedValue = e.target.value;
               setNewTask((prevTask) => ({ ...prevTask, project: selectedValue }));
             }}
-            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-white"
+            className={`${selectClass} mb-4`}
           >
             <option value="">{names.length === 0 ? "Loading..." : "Project ID"}</option>
             {(Array.isArray(names) ? names : []).map((item) => (
@@ -663,7 +675,7 @@ const TaskManager = () => {
           <select
             value={newTask.status}
             onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
-            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
+            className={`${inputClass} mb-4`}
           >
             <option value="Pending">Pending</option>
             <option value="In Progress">In Progress</option>
@@ -676,10 +688,10 @@ const TaskManager = () => {
             value={newTask.dueDate}
             onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
             required
-            className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
+            className={`${inputClass} mb-4`}
           />
 
-          <button type="submit" className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
+          <button type="submit" className="btn btn-primary w-full">
             Add Task
           </button>
         </form>
@@ -703,14 +715,14 @@ const TaskManager = () => {
             <select
               value={newStatus}
               onChange={(e) => setNewStatus(e.target.value)}
-              className="mb-4 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-gray-200"
+              className={`${inputClass} mb-4`}
             >
               <option value="Pending">Pending</option>
               <option value="In Progress">In Progress</option>
               <option value="Submitted">Submitted</option>
               <option value="Completed">Completed</option>
             </select>
-            <button type="submit" className="rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700">
+            <button type="submit" className="btn btn-primary">
               Update
             </button>
           </form>

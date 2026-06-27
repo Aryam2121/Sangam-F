@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import { fetchSeminars } from "../services/sangamApi";
 import { useAuth } from "../context/AuthContext";
 import seminar from "../assets/seminar.jpg";
@@ -36,7 +37,10 @@ const TrainingPage = () => {
   };
 
   const handleFileUpload = () => {
-    if (!pdfFile) return alert("Please select a PDF to upload!");
+    if (!pdfFile) {
+      toast.error("Please select a PDF to upload");
+      return;
+    }
     const fileUrl = URL.createObjectURL(pdfFile);
     setDocuments((prev) => [
       ...prev,
@@ -50,6 +54,7 @@ const TrainingPage = () => {
       },
     ]);
     setPdfFile(null);
+    toast.success("Document added to training library");
   };
 
   const filteredDocuments = useMemo(() => {

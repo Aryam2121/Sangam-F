@@ -46,6 +46,7 @@ const AuditTrailPage = lazy(() => import("./pages/AuditTrailPage"));
 const BudgetPage = lazy(() => import("./pages/BudgetPage"));
 const AnnouncementsPage = lazy(() => import("./pages/AnnouncementsPage"));
 const IntegrationsPage = lazy(() => import("./pages/IntegrationsPage"));
+const ApprovalsInboxPage = lazy(() => import("./pages/ApprovalsInboxPage"));
 
 const RouteFallback = () => (
   <div className="page pb-10">
@@ -104,6 +105,7 @@ const App = () => {
               <Route path="/city-kpi" element={<CityKpiDashboard />} />
               <Route path="/city-map" element={<CityMapHub />} />
               <Route path="/workflow" element={<WorkflowPage />} />
+              <Route path="/approvals" element={<ApprovalsInboxPage />} />
               <Route path="/announcements" element={<AnnouncementsPage />} />
               <Route path="/budget" element={<RoleRoute><BudgetPage /></RoleRoute>} />
               <Route path="/audit" element={<RoleRoute><AuditTrailPage /></RoleRoute>} />

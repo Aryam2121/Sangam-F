@@ -1,108 +1,136 @@
-import React, { useState, useEffect } from "react";
-
+import React, { useState, useEffect, useCallback } from "react";
+import toast from "react-hot-toast";
+import { fetchAnnouncements, unwrapApiData } from "../services/sangamApi";
+import { useStaleResource } from "../hooks/useStaleResource";
+import PageHeader from "./ui/PageHeader";
+import { EmptyState, Field, LoadingPanel, SectionCard, inputClass } from "./ui/FeatureUi";
 
 const News = () => {
-  const [articles, setArticles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("Road, Water, Gas Departments ");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [externalArticles, setExternalArticles] = useState([]);
+  const [loadingExternal, setLoadingExternal] = useState(false);
 
+  const fetcher = useCallback(() => fetchAnnouncements(), []);
+  const { data, loading } = useStaleResource({
+    key: "news-announcements",
+    fetcher,
+    maxAgeMs: 60_000,
+    initialValue: [],
+  });
 
-  useEffect(() => {
-    fetchNews(searchQuery);
-  }, []);
+  const announcements = Array.isArray(data)
+    ? data
+    : data?.announcements || unwrapApiData(data) || [];
 
-
-  const fetchNews = async (query) => {
-    setLoading(true);
+  const fetchExternalNews = async (query) => {
+    const apiKey = import.meta.env.VITE_NEWS_API_KEY?.trim();
+    if (!apiKey) {
+      toast.error("News API key not configured — showing city announcements only");
+      return;
+    }
+    setLoadingExternal(true);
     try {
       const response = await fetch(
-        `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&apiKey=${import.meta.env.VITE_NEWS_API_KEY}`
+        `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&pageSize=12&apiKey=${apiKey}`
       );
-      
-      const data = await response.json();
-      setArticles(data.articles);
-    } catch (error) {
-      console.error("Error fetching news:", error);
+      const json = await response.json();
+      setExternalArticles(Array.isArray(json.articles) ? json.articles : []);
+    } catch {
+      toast.error("Failed to fetch external news");
     } finally {
-      setLoading(false);
+      setLoadingExternal(false);
     }
   };
 
+  useEffect(() => {
+    if (import.meta.env.VITE_NEWS_API_KEY) {
+      fetchExternalNews("smart city infrastructure");
+    }
+  }, []);
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    fetchNews(searchQuery);
-  };
-
+  const filteredAnnouncements = announcements.filter((a) =>
+    (a.title || "").toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <div className="bg-gradient-to-r from-gray-900 via-black to-gray-900 min-h-screen text-white p-6">
-      {/* Header */}
-      <div className="mb-8 flex flex-col sm:flex-row justify-between items-center">
-        <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-cyan-400">
-          Latest News: Interdepartmental Collaborations
-        </h1>
-        <div className="flex mt-4 sm:mt-0">
+    <div className="page-stack pb-10">
+      <PageHeader
+        kicker="Updates"
+        title="News & announcements"
+        subtitle="City announcements from Sangam plus optional external industry news"
+      />
+
+      <SectionCard>
+        <div className="flex flex-wrap gap-3">
           <input
-            type="text"
-            placeholder="Search news..."
-            className="px-4 py-2 rounded-l-md bg-gray-700 border border-gray-600 text-white focus:border-blue-500 focus:ring-blue-500"
+            type="search"
+            className={`${inputClass} max-w-md flex-1`}
+            placeholder="Filter announcements…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-blue-600 rounded-r-md text-white hover:bg-blue-700 transition"
+            type="button"
+            className="btn"
+            onClick={() => fetchExternalNews(searchQuery || "smart city infrastructure")}
+            disabled={loadingExternal}
           >
-            Search
+            {loadingExternal ? "Loading…" : "Search external news"}
           </button>
         </div>
-      </div>
+      </SectionCard>
 
+      {loading && <LoadingPanel label="Loading announcements…" />}
 
-      {/* News Grid */}
-      {loading ? (
-        <div className="text-center text-gray-300">Loading news...</div>
-      ) : articles.length ? (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {articles.map((article, index) => (
-            <div
-              key={index}
-              className="group bg-gray-800 rounded-xl shadow-md overflow-hidden hover:shadow-lg transition duration-300"
-            >
-              <img
-                src={
-                  article.urlToImage ||
-                  "https://via.placeholder.com/300x200?text=No+Image"
-                }
-                alt={article.title}
-                className="w-full h-48 object-cover"
-              />
-              <div className="p-4">
-                <h2 className="text-lg font-bold text-gray-100 group-hover:text-cyan-400 transition">
-                  {article.title}
-                </h2>
-                <p className="text-sm text-gray-400 mt-2">
-                  {article.description || "No description available."}
-                </p>
-                <a
-                  href={article.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 mt-4 inline-block hover:underline"
-                >
-                  Read More →
-                </a>
+      {!loading && (
+        <>
+          <SectionCard title="City announcements" subtitle={`${filteredAnnouncements.length} items`}>
+            {filteredAnnouncements.length === 0 ? (
+              <EmptyState title="No announcements" description="Check the Announcements page for city updates." />
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredAnnouncements.map((item) => (
+                  <article key={item._id} className="glass-card rounded-2xl p-5">
+                    <h3 className="font-semibold text-white">{item.title}</h3>
+                    <p className="mt-2 line-clamp-3 text-sm text-slate-400">{item.body || item.message}</p>
+                    <p className="mt-3 text-xs text-slate-500">
+                      {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ""}
+                    </p>
+                  </article>
+                ))}
               </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="text-center text-gray-300">No news found.</div>
+            )}
+          </SectionCard>
+
+          {externalArticles.length > 0 && (
+            <SectionCard title="External news" subtitle="From NewsAPI">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {externalArticles.map((article, index) => (
+                  <article key={article.url || index} className="glass-card overflow-hidden rounded-2xl">
+                    {article.urlToImage && (
+                      <img src={article.urlToImage} alt="" className="h-40 w-full object-cover" />
+                    )}
+                    <div className="p-4">
+                      <h3 className="font-semibold text-white line-clamp-2">{article.title}</h3>
+                      <p className="mt-2 line-clamp-2 text-sm text-slate-400">{article.description}</p>
+                      <a
+                        href={article.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-block text-sm text-cyan-300 hover:underline"
+                      >
+                        Read more
+                      </a>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+        </>
       )}
     </div>
   );
 };
-
 
 export default News;

@@ -7,6 +7,8 @@ const baseItems = [
   { path: "/city-kpi", label: "City KPIs", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
   { path: "/city-map", label: "City Map", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
   { path: "/workflow", label: "Workflow", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
+  { path: "/approvals", label: "Approvals Inbox", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
+  { path: "/chat", label: "Messages", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
   { path: "/announcements", label: "Announcements", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
   { path: "/taskManager", label: "Task Manager", roles: ["Main Admin", "Department Admin", "Officer", "Worker"] },
   { path: "/projects", label: "Projects", roles: ["Main Admin", "Department Admin", "Officer"] },

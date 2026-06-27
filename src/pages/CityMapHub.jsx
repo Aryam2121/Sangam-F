@@ -15,7 +15,7 @@ import {
 } from "../Components/ui/FeatureUi";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { isMainAdmin } from "../utils/rolePermissions";
+import { isAdminRole } from "../utils/rolePermissions";
 import toast from "react-hot-toast";
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -36,7 +36,7 @@ const LAYER_OPTIONS = [
 const CityMapHub = () => {
   const navigate = useNavigate();
   const { userData } = useAuth();
-  const isAdmin = isMainAdmin(userData?.role);
+  const isAdmin = isAdminRole(userData?.role);
   const [filters, setFilters] = useState({ zone: "", ward: "", district: "" });
   const [showLayers, setShowLayers] = useState({ projects: true, hotspots: true, geojson: true });
   const [geoJsonText, setGeoJsonText] = useState("");

@@ -133,6 +133,9 @@ export const fetchPathById = async (pathId) => {
   return unwrapApiData(payload) || payload;
 };
 
+export const saveProjectPath = (body) =>
+  apiFetch("/api/path", { method: "POST", body: JSON.stringify(body) });
+
 export const fetchCompletedPathById = async (pathId) => {
   const payload = await apiFetch(`/api/getcompletedpathbyid/${pathId}`);
   return unwrapApiData(payload) || payload;
