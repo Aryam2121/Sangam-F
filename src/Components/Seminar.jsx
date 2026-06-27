@@ -3,7 +3,7 @@ import { BiLinkExternal, BiPlus } from "react-icons/bi";
 import toast from "react-hot-toast";
 import SeminarImage from "../assets/seminar.jpg";
 import PageHeader from "./ui/PageHeader";
-import { createSeminar, fetchSeminars } from "../services/sangamApi";
+import { createSeminar, fetchSeminars, markSeminarAttendance, fetchMySeminarCertificates } from "../services/sangamApi";
 import { useAuth } from "../context/AuthContext";
 
 const formatDate = (value) => {
@@ -21,6 +21,8 @@ const Seminar = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [attendedIds, setAttendedIds] = useState(new Set());
+  const [certCount, setCertCount] = useState(0);
   const [form, setForm] = useState({
     publisherName: "",
     seminarLink: "",
@@ -45,6 +47,13 @@ const Seminar = () => {
 
   useEffect(() => {
     loadSeminars();
+    fetchMySeminarCertificates()
+      .then((res) => {
+        setCertCount(res?.certificates?.length || 0);
+        const ids = new Set((res?.certificates || []).map((c) => c.seminarId?._id || c.seminarId));
+        setAttendedIds(ids);
+      })
+      .catch(() => {});
   }, []);
 
   const handleCreate = async (e) => {
@@ -71,12 +80,23 @@ const Seminar = () => {
     }
   };
 
+  const handleAttend = async (seminarId) => {
+    try {
+      await markSeminarAttendance(seminarId, { certificateIssued: true });
+      setAttendedIds((prev) => new Set(prev).add(seminarId));
+      setCertCount((c) => c + 1);
+      toast.success("Attendance recorded — certificate issued");
+    } catch (err) {
+      toast.error(err.message || "Could not record attendance");
+    }
+  };
+
   return (
     <div className="page pb-10">
       <PageHeader
         kicker="Training"
         title="Seminars"
-        subtitle="Published sessions and learning links from your team."
+        subtitle={`Published sessions · ${certCount} certificate${certCount === 1 ? "" : "s"} earned`}
         actions={
           canCreate && (
             <button type="button" onClick={() => setShowModal(true)} className="btn btn-primary">
@@ -117,11 +137,16 @@ const Seminar = () => {
                 <p className="mt-2 line-clamp-3 text-sm text-slate-300">
                   {seminar.description || "No description"}
                 </p>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-                  <span>
-                    By <span className="text-slate-200">{seminar.publisherName}</span>
-                  </span>
-                  <span>{formatDate(seminar.createdAt)}</span>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    className="btn text-xs"
+                    disabled={attendedIds.has(seminar._id)}
+                    onClick={() => handleAttend(seminar._id)}
+                  >
+                    {attendedIds.has(seminar._id) ? "Attended ✓" : "Mark attendance"}
+                  </button>
+                  <span className="text-xs text-slate-400">{formatDate(seminar.createdAt)}</span>
                 </div>
               </div>
             </article>

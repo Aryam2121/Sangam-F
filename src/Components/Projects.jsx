@@ -1,41 +1,66 @@
-import React, { useState, useEffect } from "react";
-import { PieChart, Pie, Cell } from "recharts";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
-import { useParams, useNavigate } from "react-router-dom";
-import { FaTasks, FaUser,FaCheckCircle,FaTimesCircle } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
+import { FaTasks, FaUser, FaPlus } from "react-icons/fa";
+import toast from "react-hot-toast";
 import {
   fetchProjects as fetchProjectsApi,
   createProject as createProjectApi,
   deleteProject,
   updateProject,
-  fetchProjectById,
-  createProjectMLModel,
+  fetchTasks,
+  fetchDepartments,
+  fetchAllUsers,
 } from "../services/sangamApi";
-const COLORS = ["#0088FE", "#00C49F"];
-const role = localStorage.getItem('userRole');
+import { buildTaskProgressMap, getProjectProgressPercent } from "../utils/projectProgress";
+import { useAuth } from "../context/AuthContext";
+import { isManagerRole } from "../utils/rolePermissions";
+import PageHeader from "./ui/PageHeader";
+import {
+  EmptyState,
+  Field,
+  LoadingPanel,
+  SectionCard,
+  StatCard,
+  StatusBadge,
+  inputClass,
+  selectClass,
+} from "./ui/FeatureUi";
+
+const EMPTY_PROJECT = {
+  name: "",
+  startDate: "",
+  endDate: "",
+  description: "",
+  departments: [],
+  projectAdmin: "",
+  status: "active",
+  resources: "",
+  workerIds: [],
+  taskIds: [],
+  zone: "",
+  ward: "",
+  district: "",
+  budgetAllocated: "",
+  lat: "",
+  lng: "",
+};
 
 const asProjectList = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.projects)) return payload.projects;
-  if (Array.isArray(payload?.data?.projects)) return payload.data.projects;
   return [];
 };
 
+const statusTone = (status) => {
+  const s = (status || "").toLowerCase();
+  if (s === "completed") return "approved";
+  if (s === "active") return "in_review";
+  return "pending";
+};
 
-const ProjectCard = ({ id, name, startDate, description, status, tasks = [], workers = [], onDelete, onEdit }) => {
-  const normalized = (status || "").toString().toLowerCase();
-  const getStatusMeta = (s) => {
-    if (s === "completed") return { badge: "badge-completed", label: "Completed", pct: 100 };
-    if (s === "active") return { badge: "badge-active", label: "Active", pct: Math.floor(Math.random() * 30) + 55 };
-    if (s === "pending") return { badge: "badge-pending", label: "Pending", pct: Math.floor(Math.random() * 20) + 15 };
-    return { badge: "badge-active", label: s || "Unknown", pct: 0 };
-  };
-
-  const { badge, label, pct } = getStatusMeta(normalized);
-  const [percent] = useState(pct);
+const ProjectCard = ({ project, progressPct, onDelete, onEdit, canManage }) => {
   const navigate = useNavigate();
 
   return (
@@ -43,510 +68,511 @@ const ProjectCard = ({ id, name, startDate, description, status, tasks = [], wor
       className="glass-card group relative flex cursor-pointer flex-col overflow-hidden p-5"
       whileHover={{ y: -4, scale: 1.01 }}
       whileTap={{ scale: 0.99 }}
-      onClick={() => navigate(`/project/${id}`)}
+      onClick={() => navigate(`/project/${project._id}`)}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-xl font-semibold text-white">{name}</h3>
-          <p className="mt-1 text-xs text-slate-400">Start Date: {new Date(startDate).toLocaleDateString()}</p>
+          <h3 className="truncate text-xl font-semibold text-white">{project.name}</h3>
+          <p className="mt-1 text-xs text-slate-400">
+            Started {project.startDate ? new Date(project.startDate).toLocaleDateString() : "—"}
+          </p>
         </div>
-        <span className={`status-badge ${badge} shrink-0 shadow-sm`}>{label}</span>
+        <StatusBadge status={statusTone(project.status)} />
       </div>
 
-      <p className="mt-3 text-xs text-slate-500">
-        <span className="font-semibold text-slate-400">Project ID:</span> {id}
-      </p>
+      {(project.zone || project.district) && (
+        <p className="mt-2 text-xs text-slate-500">
+          {[project.zone, project.ward, project.district].filter(Boolean).join(" · ")}
+        </p>
+      )}
 
-      <p className="mt-3 line-clamp-3 min-h-[3.75rem] text-sm text-slate-300">{description}</p>
+      <p className="mt-3 line-clamp-3 min-h-[3.75rem] text-sm text-slate-300">
+        {project.description || "No description"}
+      </p>
 
       <div className="mt-4">
         <div className="progress-track">
-          <div className="progress-fill bg-gradient-to-r from-cyan-400 to-blue-500" style={{ width: `${percent}%` }} />
+          <div
+            className="progress-fill bg-gradient-to-r from-cyan-400 to-blue-500"
+            style={{ width: `${progressPct}%` }}
+          />
         </div>
         <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
           <span>Progress</span>
-          <span>{percent}%</span>
+          <span>{progressPct}%</span>
         </div>
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-4 text-sm text-slate-300">
-          <span className="inline-flex items-center gap-1.5"><FaTasks /> {tasks.length} tasks</span>
-          <span className="inline-flex items-center gap-1.5"><FaUser /> {workers.length} workers</span>
+          <span className="inline-flex items-center gap-1.5">
+            <FaTasks /> {project.taskIds?.length || 0}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <FaUser /> {project.workerIds?.length || 0}
+          </span>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit(id);
-            }}
-            className="btn btn-primary px-3 py-1.5 text-xs"
-          >
-            Edit
-          </button>
-          {role === "Main Admin" && (
+        {canManage && (
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="btn btn-primary px-3 py-1.5 text-xs" onClick={() => onEdit(project)}>
+              Edit
+            </button>
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                toast.success("Project Deleted!");
-                onDelete(id);
-              }}
+              type="button"
               className="btn btn-danger px-3 py-1.5 text-xs"
+              onClick={() => onDelete(project._id)}
             >
               Delete
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </motion.div>
   );
 };
 
+const MultiSelect = ({ options, value, onChange, labelKey = "name", valueKey = "_id" }) => (
+  <select
+    multiple
+    className={`${selectClass} min-h-[7rem]`}
+    value={value}
+    onChange={(e) => onChange(Array.from(e.target.selectedOptions, (o) => o.value))}
+  >
+    {options.map((opt) => {
+      const optValue = String(opt[valueKey] ?? opt[labelKey] ?? "");
+      const optLabel = opt[labelKey] || opt.username || opt.title || optValue;
+      return (
+        <option key={optValue} value={optValue}>
+          {optLabel}
+        </option>
+      );
+    })}
+  </select>
+);
+
+const ProjectFormModal = ({ title, form, setForm, departments, users, tasks, onClose, onSubmit, submitLabel }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+    <div className="glass-panel max-h-[90vh] w-full max-w-2xl overflow-y-auto p-6">
+      <h3 className="text-lg font-semibold text-white">{title}</h3>
+      <form
+        className="mt-5 grid gap-4 sm:grid-cols-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit();
+        }}
+      >
+        <Field label="Project name" className="sm:col-span-2">
+          <input
+            className={inputClass}
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            required
+          />
+        </Field>
+        <Field label="Description" className="sm:col-span-2">
+          <textarea
+            className={`${inputClass} min-h-[80px]`}
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            required
+          />
+        </Field>
+        <Field label="Resource types" className="sm:col-span-2">
+          <input
+            className={inputClass}
+            placeholder="e.g. Cement, Steel, Labour"
+            value={form.resources}
+            onChange={(e) => setForm({ ...form, resources: e.target.value })}
+            required
+          />
+        </Field>
+        <Field label="Project admin">
+          <select
+            className={selectClass}
+            value={form.projectAdmin}
+            onChange={(e) => setForm({ ...form, projectAdmin: e.target.value })}
+            required
+          >
+            <option value="">Select admin</option>
+            {users.map((u) => (
+              <option key={u._id} value={u.username}>
+                {u.fullName || u.username}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Status">
+          <select
+            className={selectClass}
+            value={form.status}
+            onChange={(e) => setForm({ ...form, status: e.target.value })}
+          >
+            <option value="active">Active</option>
+            <option value="pending">Pending</option>
+            <option value="completed">Completed</option>
+          </select>
+        </Field>
+        <Field label="Departments" className="sm:col-span-2">
+          <MultiSelect
+            options={departments}
+            value={form.departments}
+            onChange={(departments) => setForm({ ...form, departments })}
+            labelKey="name"
+            valueKey="name"
+          />
+          <p className="mt-1 text-xs text-slate-500">Hold Ctrl/Cmd to select multiple</p>
+        </Field>
+        <Field label="Workers">
+          <MultiSelect
+            options={users}
+            value={form.workerIds}
+            onChange={(workerIds) => setForm({ ...form, workerIds })}
+            labelKey="username"
+            valueKey="username"
+          />
+        </Field>
+        <Field label="Tasks">
+          <MultiSelect
+            options={tasks}
+            value={form.taskIds}
+            onChange={(taskIds) => setForm({ ...form, taskIds })}
+            labelKey="title"
+            valueKey="_id"
+          />
+        </Field>
+        <Field label="Zone">
+          <input className={inputClass} value={form.zone} onChange={(e) => setForm({ ...form, zone: e.target.value })} />
+        </Field>
+        <Field label="Ward">
+          <input className={inputClass} value={form.ward} onChange={(e) => setForm({ ...form, ward: e.target.value })} />
+        </Field>
+        <Field label="District">
+          <input
+            className={inputClass}
+            value={form.district}
+            onChange={(e) => setForm({ ...form, district: e.target.value })}
+          />
+        </Field>
+        <Field label="Budget allocated (₹)">
+          <input
+            type="number"
+            min="0"
+            className={inputClass}
+            value={form.budgetAllocated}
+            onChange={(e) => setForm({ ...form, budgetAllocated: e.target.value })}
+          />
+        </Field>
+        <Field label="Start date">
+          <input
+            type="date"
+            className={inputClass}
+            value={form.startDate}
+            onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+          />
+        </Field>
+        <Field label="End date">
+          <input
+            type="date"
+            className={inputClass}
+            value={form.endDate}
+            onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+          />
+        </Field>
+        <Field label="Latitude">
+          <input
+            type="number"
+            step="any"
+            className={inputClass}
+            value={form.lat}
+            onChange={(e) => setForm({ ...form, lat: e.target.value })}
+          />
+        </Field>
+        <Field label="Longitude">
+          <input
+            type="number"
+            step="any"
+            className={inputClass}
+            value={form.lng}
+            onChange={(e) => setForm({ ...form, lng: e.target.value })}
+          />
+        </Field>
+        <div className="flex justify-end gap-2 sm:col-span-2">
+          <button type="button" className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary">
+            {submitLabel}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+);
 
 const Projects = () => {
+  const { userData } = useAuth();
+  const canManage = isManagerRole(userData?.role);
+
   const [projects, setProjects] = useState([]);
+  const [taskProgressMap, setTaskProgressMap] = useState({});
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filteredProjects, setFilteredProjects] = useState([]);
+  const [statusFilter, setStatusFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);  // State for edit modal
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [newProject, setNewProject] = useState({
-    name: "",
-    startDate: "",
-    description: "",
-    departments:[],
-    projectAdmin: "",
-    workers: [],
-    tasks: [],
-    status: "active",
-    resources: "",
-    workerIds: [],
-    taskIds: []
-  });
-  const [updatedProject, setUpdatedProject] = useState({
-    name: "",
-    description: "",
-    departments: [],
-    status: "active",
-  });
-  // Fetch Projects
-  useEffect(() => {
-    fetchProjects();
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [newProject, setNewProject] = useState(EMPTY_PROJECT);
+  const [editProject, setEditProject] = useState(EMPTY_PROJECT);
+  const [editId, setEditId] = useState(null);
+  const [departments, setDepartments] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [tasks, setTasks] = useState([]);
+
+  const loadMeta = useCallback(async () => {
+    try {
+      const [depts, allUsers, allTasks] = await Promise.all([
+        fetchDepartments(),
+        fetchAllUsers(),
+        fetchTasks(),
+      ]);
+      setDepartments(Array.isArray(depts) ? depts : []);
+      setUsers(Array.isArray(allUsers) ? allUsers : []);
+      setTasks(Array.isArray(allTasks) ? allTasks : []);
+      setTaskProgressMap(buildTaskProgressMap(Array.isArray(allTasks) ? allTasks : []));
+    } catch {
+      setDepartments([]);
+      setUsers([]);
+      setTasks([]);
+    }
   }, []);
 
-
-  useEffect(() => {
-    setFilteredProjects(
-      asProjectList(projects).filter((project) =>
-        (project?.name || "").toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    );
-  }, [searchQuery, projects]);
-
-
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       setProjectsLoading(true);
       const data = await fetchProjectsApi();
       setProjects(asProjectList(data));
-    } catch (error) {
+    } catch {
       toast.error("Failed to fetch projects");
     } finally {
       setProjectsLoading(false);
     }
-  };
-  const handleDeleteProject = (projectId) => {
-    setProjects((prevProjects) =>
-      prevProjects.filter((project) => project._id !== projectId)
-    );
+  }, []);
 
-    deleteProject(projectId)
-      .then(() => {
-        console.log(`Project with ID ${projectId} deleted successfully`);
-      })
-      .catch((error) => {
-        console.error('Error deleting project:', error);
-      });
-  };
-  const createProject = async () => {
-    try {
-      await createProjectApi(newProject);
-      fetchProjects(); // Refresh project list
-      toast.success("Project created successfully");
-      setShowModal(false);
-      setNewProject({
-        name: "",
-        startDate: "",
-        description: "",
-        departments:[],
-        projectAdmin: "",
-        workers: [],
-        tasks: [],
-        status: "active",
-        resources: "",
-        workerIds: [],
-        taskIds: []
-      });
-    } catch (error) {
-      toast.error("Failed to create project");
-    }
-  };
- 
- 
- 
-  const [projectId, setProjectId] = useState("");  // Store the input project ID
-  const [projectData, setProjectData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  useEffect(() => {
+    fetchProjects();
+    loadMeta();
+  }, [fetchProjects, loadMeta]);
 
-  const formatDepartments = (departments = []) =>
-    departments
-      .map((dept) => (typeof dept === "string" ? dept : dept?.name))
-      .filter(Boolean)
-      .join(", ");
-
-
-  // Fetch the project details based on the project ID
-  const fetchProject = async () => {
-    if (!projectId.trim()) return; // Don't make the API call if projectId is empty
-    try {
-      setLoading(true);
-      setError(""); // Reset error before the new fetch
-      const data = await fetchProjectById(projectId);
-      console.log("Response data:", data);
-      setProjectData(data);
-    } catch (err) {
-      console.error("Error fetching project:", err.message);
-      setError(err.message || "Failed to fetch project by ID.");
-    } finally {
-      setLoading(false);
-    }
-  };
- 
-  const handleEditProject = (id) => {
-    console.log("Editing project ID:", id); // Debugging line
-    const projectToEdit = projects.find((project) => project._id === id);
-    if (projectToEdit) {
-      setSelectedProject(projectToEdit);
-      setUpdatedProject({
-        name: projectToEdit.name,
-        description: projectToEdit.description,
-        departments: projectToEdit.departments,
-        status: projectToEdit.status,
-      });
-      setShowEditModal(true);
-    }
-  };
- 
-  const handleUpdateProject = async () => {
-    try {
-      const updatedData = await updateProject(selectedProject._id, updatedProject);
-      const nextProject = updatedData?.updatedProject || updatedData;
-      setProjects((prevProjects) =>
-        prevProjects.map((project) =>
-          project._id === nextProject._id ? nextProject : project
-        )
-      );
-      toast.success("Project updated successfully!");
-      setShowEditModal(false);  // Close the modal after successful update
-    } catch (error) {
-      toast.error("Error updating project");
-    }
-  };
-  const handleCloseEditModal = () => {
-    setShowEditModal(false);
-    setSelectedProject(null);  // Reset selected project
-    setUpdatedProject({});  // Optionally reset updated project state
-  };
-  const [formData, setFormData] = useState({
-    project_id: "",
-    projectML_id: "",
-    department: "",
-    task_priority: 0,
-    task_complexity: 0,
-    available_resources: 0,
-    resources_allocated: 0,
-    communication_frequency: 0,
-    historical_delay: 0,
-    expected_completion_time: 0,
-    actual_completion_time: 0,
-    cost_estimate: 0,
-    actual_cost: 0,
-    site_location: "",
-    latitude: 0,
-    longitude: 0,
-    project_start_date: "",
-    project_end_date: "",
-    conflict_indicator: 0,
-    cost_reduction_potential: 0,
-    cost_reduction_category: "",
-    resource_utilization: 0,
-    complexity_to_priority_ratio: 0,
-    delay_factor: 0,
-    adjusted_frequency: 0,
-  });
-
-
-  const [response, setResponse] = useState(null);
- 
-
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: name.includes("date") || name.includes("latitude") || name.includes("longitude") || !isNaN(Number(value))
-        ? Number(value) || value
-        : value,
+  const filteredProjects = useMemo(() => {
+    return asProjectList(projects).filter((project) => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        (project?.name || "").toLowerCase().includes(q) ||
+        (project?.district || "").toLowerCase().includes(q) ||
+        (project?.zone || "").toLowerCase().includes(q);
+      const matchesStatus = statusFilter === "all" || project.status === statusFilter;
+      return matchesSearch && matchesStatus;
     });
+  }, [projects, searchQuery, statusFilter]);
+
+  const stats = useMemo(() => {
+    const list = asProjectList(projects);
+    return {
+      total: list.length,
+      active: list.filter((p) => p.status === "active").length,
+      completed: list.filter((p) => p.status === "completed").length,
+    };
+  }, [projects]);
+
+  const buildPayload = (form) => {
+    const payload = {
+      name: form.name,
+      description: form.description,
+      departments: form.departments,
+      resources: form.resources,
+      projectAdmin: form.projectAdmin,
+      workerIds: form.workerIds,
+      taskIds: form.taskIds,
+      status: form.status,
+    };
+    if (form.zone) payload.zone = form.zone;
+    if (form.ward) payload.ward = form.ward;
+    if (form.district) payload.district = form.district;
+    if (form.budgetAllocated !== "") payload.budgetAllocated = Number(form.budgetAllocated);
+    if (form.startDate) payload.startDate = form.startDate;
+    if (form.endDate) payload.endDate = form.endDate;
+    if (form.lat && form.lng) {
+      payload.location = { lat: Number(form.lat), lng: Number(form.lng) };
+    }
+    return payload;
   };
 
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-
+  const handleCreate = async () => {
     try {
-      const data = await createProjectMLModel(formData);
-      setResponse(data);
+      await createProjectApi(buildPayload(newProject));
+      toast.success("Project created");
+      setShowModal(false);
+      setNewProject(EMPTY_PROJECT);
+      fetchProjects();
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      toast.error(err.message || "Failed to create project");
     }
   };
- 
+
+  const handleUpdate = async () => {
+    try {
+      const updated = await updateProject(editId, buildPayload(editProject));
+      const next = updated?.updatedProject || updated;
+      setProjects((prev) => prev.map((p) => (p._id === editId ? { ...p, ...next } : p)));
+      toast.success("Project updated");
+      setShowEditModal(false);
+    } catch (err) {
+      toast.error(err.message || "Failed to update project");
+    }
+  };
+
+  const handleDelete = async (projectId) => {
+    try {
+      await deleteProject(projectId);
+      setProjects((prev) => prev.filter((p) => p._id !== projectId));
+      toast.success("Project deleted");
+    } catch {
+      toast.error("Failed to delete project");
+    }
+  };
+
+  const openEdit = (project) => {
+    const deptNames = (project.departments || []).map((d) =>
+      typeof d === "string" ? d : d?.name
+    ).filter(Boolean);
+    setEditId(project._id);
+    setEditProject({
+      name: project.name || "",
+      description: project.description || "",
+      departments: deptNames,
+      projectAdmin: project.projectAdmin || "",
+      status: project.status || "active",
+      resources: project.resources || "",
+      workerIds: project.workerIds || [],
+      taskIds: (project.taskIds || []).map((t) => String(t._id || t)),
+      zone: project.zone || "",
+      ward: project.ward || "",
+      district: project.district || "",
+      budgetAllocated: project.budgetAllocated ?? "",
+      startDate: project.startDate ? project.startDate.slice(0, 10) : "",
+      endDate: project.endDate ? project.endDate.slice(0, 10) : "",
+      lat: project.location?.lat ?? "",
+      lng: project.location?.lng ?? "",
+    });
+    setShowEditModal(true);
+  };
+
   return (
-   
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#111827,_#020617_60%)] px-6 py-10 text-white">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur">
-        <div>
-          <h2 className="text-3xl font-semibold">Project Management</h2>
-          <p className="mt-2 text-sm text-slate-300">Monitor progress, resources, and team allocation in real time.</p>
-        </div>
-      {/* Search Bar for Projects */}
-      <div className="flex items-center gap-2 w-full max-w-md">
+    <div className="page-stack pb-10">
+      <PageHeader
+        kicker="Projects"
+        title="Project Management"
+        subtitle="Monitor progress, geography, budget, and team allocation"
+        actions={
+          canManage ? (
+            <button type="button" className="btn btn-primary" onClick={() => setShowModal(true)}>
+              <FaPlus /> New project
+            </button>
+          ) : null
+        }
+      />
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Total projects" value={stats.total} tone="cyan" />
+        <StatCard label="Active" value={stats.active} tone="emerald" />
+        <StatCard label="Completed" value={stats.completed} tone="violet" />
+      </div>
+
+      <SectionCard>
+        <div className="flex flex-wrap items-center gap-3">
           <input
-            type="text"
-            placeholder="Search by Project ID"
-            value={projectId}  // Use projectId here
-            onChange={(e) => setProjectId(e.target.value)}  // Update projectId on change
-            className="w-full rounded-md border border-white/10 bg-slate-900/70 p-2 text-sm text-slate-200 focus:border-cyan-400 focus:outline-none"
+            type="search"
+            placeholder="Search by name, zone, or district…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className={`${inputClass} max-w-md flex-1`}
           />
-          <button
-            className="bg-blue-500 text-white p-3 rounded-md hover:bg-blue-600"
-            onClick={fetchProject} // Trigger the fetchProject function on click
-            disabled={loading}
-          >
-            {loading ? "Fetching..." : "Search"}
-          </button>
-        </div>
-      </div>
-     
-
-
-      {/* Show the fetched project */}
-      {projectData ? (
-        <div className="mt-6 p-4 bg-gray-800 rounded-md">
-          <h3 className="text-xl font-semibold">Project Details</h3>
-          <p><strong>Name:</strong> {projectData.name}</p>
-          <p><strong>Description:</strong> {projectData.description}</p>
-          <p><strong>Departments:</strong> {formatDepartments(projectData.departments)}</p>
-          <p><strong>Status:</strong> {projectData.status}</p>
-          <p><strong>Workers:</strong> {projectData.workerIds.join(", ")}</p>
-          {/* Render other project details as needed */}
-        </div>
-      ) : projectId && !loading && !error ? (
-        <p className="mt-6 text-red-500">No project found with this ID</p>
-      ) : null}
-
-
-      {/* Button to create a new project */}
-      {(role === 'Main Admin') && (
-      <motion.button
-        onClick={() => setShowModal(true)}
-        className="mb-4 rounded-md bg-emerald-500 px-4 py-2 text-white hover:bg-emerald-400 transition"
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        Create New Project
-      </motion.button>)}
-
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projectsLoading ? (
-          [1, 2, 3, 4, 5, 6].map((item) => (
-            <div key={item} className="glass-card p-5">
-              <div className="skeleton h-6 w-2/3" />
-              <div className="skeleton mt-2 h-3 w-1/3" />
-              <div className="skeleton mt-4 h-4 w-full" />
-              <div className="skeleton mt-2 h-4 w-5/6" />
-              <div className="skeleton mt-4 h-2 w-full" />
-              <div className="skeleton mt-4 h-8 w-28" />
-            </div>
-          ))
-        ) : filteredProjects.length > 0 ? (
-          filteredProjects.map((project) => (
-            <ProjectCard
-              key={project._id}
-              id={project._id}
-              name={project.name}
-              startDate={project.startDate}
-              description={project.description}
-              departments={project.departments}
-              status={project.status}
-              tasks={project.taskIds}
-              workers={project.workerIds || []}
-              onDelete={handleDeleteProject}
-              onEdit={handleEditProject}
-            />
-          ))
-        ) : (
-          <p className="text-slate-300">No projects available</p>
-        )}
-      </div>
-
-
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
-          <div className="bg-gray-800 p-6 rounded-lg w-full max-w-lg shadow-lg">
-            <h3 className="text-xl font-semibold mb-4">Create New Project</h3>
-            <input
-              type="text"
-              placeholder="Project Name"
-              value={newProject.name}
-              onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-              className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
-            />
-            <textarea
-              placeholder="Description"
-              value={newProject.description}
-              onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-              className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
-            />
-            <input
-              type="text"
-              placeholder="Departments (comma-separated)"
-              value={newProject.departments.join(", ")}
-              onChange={(e) => setNewProject({ ...newProject, departments: e.target.value.split(", ") })}
-              className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
-            />
-            <input
-              type="text"
-              placeholder="Resources (comma-separated)"
-              value={newProject.resources}
-              onChange={(e) => setNewProject({ ...newProject, resources: e.target.value })}
-              className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
-            />
-            <input
-              type="text"
-              placeholder="Project Admin"
-              value={newProject.projectAdmin}
-              onChange={(e) => setNewProject({ ...newProject, projectAdmin: e.target.value })}
-              className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
-            />
-            <input
-              type="text"
-              placeholder="Worker usernames (comma-separated)"
-              value={newProject.workerIds.join(", ")}
-              onChange={(e) => setNewProject({ ...newProject, workerIds: e.target.value.split(",") })}
-              className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
-            />
-            <input
-              type="text"
-              placeholder="Task IDs (comma-separated)"
-              value={newProject.taskIds.join(", ")}
-              onChange={(e) => setNewProject({ ...newProject, taskIds: e.target.value.split(",") })}
-              className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
-            />
-            <div className="flex justify-end gap-4">
-              <motion.button
-                onClick={() => setShowModal(false)}
-                className="bg-gray-500 text-white px-4 py-2 rounded-md"
-                whileHover={{ scale: 1.05 }}
+          <div className="flex flex-wrap gap-2">
+            {["all", "active", "pending", "completed"].map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatusFilter(s)}
+                className={`rounded-xl px-3 py-1.5 text-xs font-medium capitalize transition ${
+                  statusFilter === s
+                    ? "bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-400/30"
+                    : "text-slate-400 hover:bg-white/5"
+                }`}
               >
-                Cancel
-              </motion.button>
-              <motion.button
-                onClick={createProject}
-                className="bg-green-500 text-white px-4 py-2 rounded-md"
-                whileHover={{ scale: 1.05 }}
-              >
-                Create Project
-              </motion.button>
-             
-            </div>
+                {s}
+              </button>
+            ))}
           </div>
         </div>
+      </SectionCard>
+
+      {projectsLoading ? (
+        <LoadingPanel label="Loading projects…" />
+      ) : filteredProjects.length > 0 ? (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {filteredProjects.map((project) => (
+            <ProjectCard
+              key={project._id}
+              project={project}
+              progressPct={getProjectProgressPercent(project, taskProgressMap)}
+              onDelete={handleDelete}
+              onEdit={openEdit}
+              canManage={canManage}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          title="No projects found"
+          description={canManage ? "Create your first project to get started." : "No projects match your filters."}
+          action={
+            canManage ? (
+              <button type="button" className="btn btn-primary" onClick={() => setShowModal(true)}>
+                Create project
+              </button>
+            ) : null
+          }
+        />
       )}
-       {showEditModal && selectedProject && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
-    <div className="bg-gray-800 p-6 rounded-lg w-full max-w-lg shadow-lg">
-      <h3 className="text-xl font-semibold mb-4">Edit Project</h3>
 
+      {showModal && (
+        <ProjectFormModal
+          title="Create new project"
+          form={newProject}
+          setForm={setNewProject}
+          departments={departments}
+          users={users}
+          tasks={tasks}
+          onClose={() => setShowModal(false)}
+          onSubmit={handleCreate}
+          submitLabel="Create project"
+        />
+      )}
 
-      {/* Project Edit Form */}
-      <input
-        type="text"
-        placeholder="Project Name"
-        value={updatedProject.name}
-        onChange={(e) => setUpdatedProject({ ...updatedProject, name: e.target.value })}
-        className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
-      />
-      <textarea
-        placeholder="Description"
-        value={updatedProject.description}
-        onChange={(e) => setUpdatedProject({ ...updatedProject, description: e.target.value })}
-        className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
-      />
-      <input
-        type="text"
-        placeholder="Departments (comma-separated)"
-        value={updatedProject.departments.join(", ")}
-        onChange={(e) => setUpdatedProject({ ...updatedProject, departments: e.target.value.split(", ") })}
-        className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
-      />
-      <select
-        value={updatedProject.status}
-        onChange={(e) => setUpdatedProject({ ...updatedProject, status: e.target.value })}
-        className="p-2 bg-gray-700 text-white border border-gray-600 rounded-md mb-4 w-full"
-      >
-        <option value="active">Active</option>
-        <option value="pending">Pending</option>
-        <option value="completed">Completed</option>
-       
-      </select> 
-
-
-      {/* Buttons for Cancel and Update */}
-      <div className="flex justify-end gap-4">
-        <motion.button
-          onClick={() => setShowEditModal(false)}
-          className="bg-gray-500 text-white px-4 py-2 rounded-md"
-          whileHover={{ scale: 1.05 }}
-        >
-          Cancel
-        </motion.button>
-        <motion.button
-          onClick={handleUpdateProject} // Trigger the update function
-          className="bg-blue-500 text-white px-4 py-2 rounded-md"
-          whileHover={{ scale: 1.05 }}
-        >
-          Update Project
-        </motion.button>
-      </div>
-    </div>
-  </div>
-)}
-      <ToastContainer />
+      {showEditModal && (
+        <ProjectFormModal
+          title="Edit project"
+          form={editProject}
+          setForm={setEditProject}
+          departments={departments}
+          users={users}
+          tasks={tasks}
+          onClose={() => setShowEditModal(false)}
+          onSubmit={handleUpdate}
+          submitLabel="Save changes"
+        />
+      )}
     </div>
   );
 };
-
-
-
 
 export default Projects;

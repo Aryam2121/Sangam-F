@@ -2,20 +2,22 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { firebaseSignOut } from "../config/firebase";
-import { fetchNotifications, logoutSession } from "../services/sangamApi";
+import { fetchNotifications, logoutSession, markAllNotificationsRead } from "../services/sangamApi";
 import { homePathForRole, normalizeRole } from "../utils/authRedirect";
 import GlobalSearch from "./ui/GlobalSearch";
 import { getUserAvatarUrl } from "../utils/userAvatar";
 import sung from "../assets/newlogo.svg";
 import { useStaleResource } from "../hooks/useStaleResource";
+import { useI18n } from "../context/I18nContext";
 
 const Navbar = () => {
   const navigate = useNavigate();
-  const { logout, userData } = useAuth();
+  const { logout, userData, isAuthenticated } = useAuth();
   const menuRef = useRef(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
+  const { t, lang, setLang } = useI18n();
   const role = normalizeRole(userData?.role || localStorage.getItem("userRole"));
 
   const dashboardPath = useMemo(() => homePathForRole(role), [role]);
@@ -29,6 +31,7 @@ const Navbar = () => {
   const { data: notifData, loading: notifLoading } = useStaleResource({
     key: `notifications:${role}`,
     fetcher: notificationsFetcher,
+    enabled: isAuthenticated,
     maxAgeMs: 30_000,
     refreshMs: 60_000,
     initialValue: { notifications: [] },
@@ -46,6 +49,8 @@ const Navbar = () => {
       }),
     [navigate, notifData?.notifications, role, tasksPath]
   );
+
+  const unreadCount = notifData?.unreadCount ?? notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -80,6 +85,15 @@ const Navbar = () => {
         <GlobalSearch />
 
         <div ref={menuRef} className="relative flex items-center gap-2 sm:gap-4">
+          <select
+            value={lang}
+            onChange={(e) => setLang(e.target.value)}
+            className="hidden rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-xs text-slate-200 sm:block"
+            aria-label={t("language")}
+          >
+            <option value="en">EN</option>
+            <option value="hi">हिं</option>
+          </select>
           <button
             type="button"
             onClick={() => {
@@ -93,9 +107,9 @@ const Navbar = () => {
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.8" stroke="currentColor" className="h-6 w-6">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 7.165 7 8.97 7 11v3.159c0 .417-.154.823-.405 1.145L5 17h5m5 0a3 3 0 11-6 0m6 0H9" />
             </svg>
-            {notifications.length > 0 && (
+            {unreadCount > 0 && (
               <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-cyan-400 text-[9px] font-bold text-slate-950">
-                {notifications.length > 9 ? "9+" : notifications.length}
+                {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
           </button>
@@ -113,12 +127,27 @@ const Navbar = () => {
             <div className="absolute right-14 top-14 w-[min(22rem,calc(100vw-2rem))] rounded-3xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl sm:right-16">
               <div className="mb-3 flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-white">Notifications</p>
-                  <p className="text-xs text-slate-400">Live from your workspace</p>
+                  <p className="text-sm font-semibold text-white">{t("notifications")}</p>
+                  <p className="text-xs text-slate-400">{unreadCount} unread</p>
                 </div>
-                <button type="button" onClick={() => setShowNotifications(false)} className="btn px-3 py-1 text-xs">
-                  Close
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await markAllNotificationsRead();
+                      } catch {
+                        /* ignore */
+                      }
+                    }}
+                    className="btn px-3 py-1 text-xs"
+                  >
+                    {t("markAllRead")}
+                  </button>
+                  <button type="button" onClick={() => setShowNotifications(false)} className="btn px-3 py-1 text-xs">
+                    Close
+                  </button>
+                </div>
               </div>
 
               <div className="max-h-64 space-y-2 overflow-y-auto custom-scrollbar">
@@ -137,7 +166,9 @@ const Navbar = () => {
                         item.action();
                         setShowNotifications(false);
                       }}
-                      className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-left transition hover:border-cyan-400/30 hover:bg-white/10"
+                      className={`w-full rounded-2xl border p-3 text-left transition hover:border-cyan-400/30 hover:bg-white/10 ${
+                        item.read ? "border-white/5 bg-white/[0.02] opacity-75" : "border-white/10 bg-white/5"
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>

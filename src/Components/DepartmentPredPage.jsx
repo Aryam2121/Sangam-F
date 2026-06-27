@@ -11,145 +11,81 @@ import {
   Legend,
 } from "chart.js";
 import { mlPredict } from "../services/sangamApi";
+import MlPageShell from "./ui/MlPageShell";
+import { SectionCard } from "./ui/FeatureUi";
 
-
-// Register required components for Chart.js
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
-
 const DepartmentPredPage = () => {
-  const initialFields = {
-    department_1: "Roads",
-    department_2: "Electricity",
-    latitude: 28.7041,
-    longitude: 77.1025,
+  const [formData, setFormData] = useState({
+    department_1: "",
+    department_2: "",
+    latitude: "",
+    longitude: "",
     historical_conflicts: "",
     project_overlap: "",
     distance: "",
     communication_frequency: "",
-  };
-
-
-  const [formData, setFormData] = useState(initialFields);
+  });
   const [result, setResult] = useState(null);
-  const [chartData, setChartData] = useState(null); // State for chart data
+  const [chartData, setChartData] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
-
-  // Handle field changes
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-  };
-
-
-  // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const runPrediction = async () => {
+    setSubmitting(true);
     try {
-      const data = await mlPredict('/predict_department_conflict', formData);
+      const data = await mlPredict("/predict_department_conflict", formData);
       setResult(data);
-
-
-      // Update chart data dynamically based on response
-      if (data && data.chart_values) {
+      if (data?.chart_values) {
         setChartData({
-          labels: data.chart_labels || ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"], // Default labels if not provided
+          labels: data.chart_labels || ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
           datasets: [
             {
-              label: "Department Conflict Prediction",
+              label: "Department conflict index",
               data: data.chart_values,
-              borderColor: "rgb(255, 99, 132)", // Custom color for conflict prediction
-              backgroundColor: "rgba(255, 99, 132, 0.2)",
+              borderColor: "#818cf8",
+              backgroundColor: "rgba(129, 140, 248, 0.15)",
               tension: 0.3,
             },
           ],
         });
       }
-    } catch (error) {
-      console.error("Error:", error);
-      alert("Failed to fetch prediction. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
-
-  const chartOptions = {
-    responsive: true,
-    scales: {
-      x: { title: { display: true, text: "Months" } },
-      y: { title: { display: true, text: "Conflict Level" }, beginAtZero: true },
-    },
-    plugins: {
-      tooltip: {
-        callbacks: {
-          label: (tooltipItem) => `${tooltipItem.dataset.label}: ${tooltipItem.raw}`,
-        },
-      },
-    },
-  };
-
-
   return (
-    <div className="page pb-10">
-      <div className="page-section mb-6">
-        <p className="page-kicker">Prediction</p>
-        <h1 className="page-title mt-2">Department Conflict Prediction</h1>
-        <p className="page-subtitle">Provide details to predict department conflicts.</p>
-      </div>
-
-
-      {/* Form Section */}
-      <div className="page-section space-y-8">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {Object.keys(formData).map((key) => (
-            <div key={key} className="flex flex-col">
-              <label htmlFor={key} className="text-gray-400 capitalize">
-                {key.replace(/_/g, " ")}:
-              </label>
-              <input
-                type={key === "department_1" || key === "department_2" ? "text" : "number"}
-                id={key}
-                name={key}
-                value={formData[key]}
-                onChange={handleChange}
-                className="field mt-2"
-                placeholder={`Enter ${key.replace(/_/g, " ")}`}
-                required
+    <MlPageShell
+      title="Department Conflict Prediction"
+      subtitle="Model cross-department friction from overlap and communication patterns"
+      formData={formData}
+      setFormData={setFormData}
+      onSubmit={runPrediction}
+      submitting={submitting}
+      result={result}
+      showPrefill={false}
+      chartSection={
+        chartData && (
+          <SectionCard title="Conflict trend" className="mt-6">
+            <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4">
+              <Line
+                data={chartData}
+                options={{
+                  responsive: true,
+                  plugins: { legend: { labels: { color: "#94a3b8" } } },
+                  scales: {
+                    x: { ticks: { color: "#64748b" }, grid: { color: "#1e293b" } },
+                    y: { ticks: { color: "#64748b" }, grid: { color: "#1e293b" } },
+                  },
+                }}
               />
             </div>
-          ))}
-          <button
-            type="submit"
-            className="btn btn-primary w-full mt-2"
-          >
-            Submit
-          </button>
-        </form>
-
-
-        {/* Result Display */}
-        {result && (
-          <div className="mt-6 bg-gray-700 p-4 rounded-md shadow">
-            <h2 className="text-lg font-semibold">Prediction Result:</h2>
-            <pre className="text-gray-300 mt-2">{JSON.stringify(result, null, 2)}</pre>
-          </div>
-        )}
-      </div>
-
-
-      {/* Line Chart Section */}
-      {chartData && (
-        <section className="mt-12">
-          <h2 className="text-xl font-semibold text-center mb-4">Department Conflict Over Time</h2>
-          <div className="bg-gray-700 p-4 rounded-lg shadow max-w-4xl mx-auto">
-            <Line data={chartData} options={chartOptions} />
-          </div>
-        </section>
-      )}
-    </div>
+          </SectionCard>
+        )
+      }
+    />
   );
 };
 
-
 export default DepartmentPredPage;
-
-

@@ -2,20 +2,27 @@ import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { fetchCompletedPathById } from '../services/sangamApi';
+import useProjectPicker from '../hooks/useProjectPicker';
 
 const DEFAULT_CENTER = [28.6139, 77.209];
-const DEMO_PROJECT_ID = '6749b789545dcca89c35d67a';
 
 const CompletedPath = () => {
+  const { projects, selectedProjectId, setSelectedProjectId, loadingProjects } = useProjectPicker();
   const [coordinates, setCoordinates] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!selectedProjectId) {
+      setCoordinates([]);
+      return;
+    }
+
     const fetchData = async () => {
       try {
+        setLoading(true);
         setError('');
-        const data = await fetchCompletedPathById(DEMO_PROJECT_ID);
+        const data = await fetchCompletedPathById(selectedProjectId);
         const pathData = data?.completedPath?.[0];
         if (!pathData?.points?.length) {
           setCoordinates([]);
@@ -23,16 +30,17 @@ const CompletedPath = () => {
         }
         setCoordinates(pathData.points.map((point) => [point.lat, point.lng]));
       } catch (fetchError) {
-        console.error('Error fetching completed path:', fetchError);
         setError(fetchError.message || 'Failed to load completed path.');
+        setCoordinates([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [selectedProjectId]);
 
+  const selectedProject = projects.find((p) => p._id === selectedProjectId);
   const mapCenter = coordinates[0] || DEFAULT_CENTER;
 
   return (
@@ -41,6 +49,27 @@ const CompletedPath = () => {
         <p className="page-kicker">Routing</p>
         <h1 className="page-title mt-2">Completed Path</h1>
         <p className="page-subtitle">Executed route segments already finished on site.</p>
+        <div className="mt-4 max-w-md">
+          <label className="mb-2 block text-xs uppercase tracking-wider text-slate-400">Project</label>
+          <select
+            className="field w-full"
+            value={selectedProjectId}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
+            disabled={loadingProjects || projects.length === 0}
+          >
+            {projects.length === 0 && <option value="">No projects available</option>}
+            {projects.map((project) => (
+              <option key={project._id} value={project._id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+          {selectedProject && (
+            <p className="mt-2 text-xs text-slate-500">
+              {selectedProject.zone || selectedProject.ward || selectedProject.district || "No zone data"}
+            </p>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -49,7 +78,7 @@ const CompletedPath = () => {
         </div>
       )}
 
-      {loading ? (
+      {loading || loadingProjects ? (
         <div className="glass-panel flex h-96 items-center justify-center">
           <div className="loading-spinner" />
         </div>
@@ -57,7 +86,7 @@ const CompletedPath = () => {
         <>
           <div className="glass-panel mb-6 grid max-h-48 grid-cols-1 gap-2 overflow-y-auto p-4 custom-scrollbar sm:grid-cols-2 lg:grid-cols-3">
             {coordinates.length === 0 ? (
-              <p className="text-sm text-slate-400">No completed path coordinates available.</p>
+              <p className="text-sm text-slate-400">No completed path coordinates for this project.</p>
             ) : (
               coordinates.map(([lat, lng], index) => (
                 <div

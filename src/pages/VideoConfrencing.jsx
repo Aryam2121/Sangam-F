@@ -1,58 +1,88 @@
-import React, { useState } from 'react';
-import VideoConference from '../Components/VideoConfrence';
+import React, { useState } from "react";
+import toast from "react-hot-toast";
+import VideoConference from "../Components/VideoConfrence";
+import PageHeader from "../Components/ui/PageHeader";
+import { Field, SectionCard, inputClass } from "../Components/ui/FeatureUi";
+import { createAnnouncement } from "../services/sangamApi";
 
 const VideoConferencePage = () => {
-  const roomID = new URLSearchParams(window.location.search).get('roomID') || (Math.floor(Math.random() * 10000) + "");
+  const roomID =
+    new URLSearchParams(window.location.search).get("roomID") ||
+    String(Math.floor(Math.random() * 10000) + 1);
 
-  // State to manage the visibility of the form
-  const [isFormVisible, setFormVisible] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ title: "", message: "" });
+  const [saving, setSaving] = useState(false);
 
-  // Function to toggle the form visibility
-  const toggleFormVisibility = () => {
-    setFormVisible(!isFormVisible);
+  const handleNotify = async (e) => {
+    e.preventDefault();
+    if (!form.title.trim()) {
+      toast.error("Title is required");
+      return;
+    }
+    setSaving(true);
+    try {
+      await createAnnouncement({
+        title: form.title,
+        body: form.message || `Meeting room ${roomID}`,
+        priority: "medium",
+      });
+      toast.success("Team notified via announcements");
+      setForm({ title: "", message: "" });
+      setShowForm(false);
+    } catch (err) {
+      toast.error(err.message || "Could not send notification");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className=" bg-[#101114] relative">
-      <h1 className="text-3xl font-bold mb-4">Video Conference</h1>
-      
-      <VideoConference roomID={roomID} />
+    <div className="page-stack pb-10">
+      <PageHeader
+        kicker="Collaboration"
+        title="Video conference"
+        subtitle={`Room ${roomID} — schedule and notify your team`}
+        actions={
+          <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
+            Notify team
+          </button>
+        }
+      />
 
-      {/* Button to open form */}
-      <button 
-        className="absolute top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded"
-        onClick={toggleFormVisibility}
-      >
-        Add New Notification
-      </button>
+      <SectionCard title="Meeting room">
+        <VideoConference roomID={roomID} />
+      </SectionCard>
 
-      {/* The Form */}
-      {isFormVisible && (
-        <div className="fixed top-0 left-0 right-0 bottom-0 flex justify-center items-center bg-gray-800 bg-opacity-50 z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-96">
-            <h2 className="text-2xl font-bold mb-4">New Notification</h2>
-            <form>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700">Notification Title</label>
-                <input type="text" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700">Message</label>
-                <textarea className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"></textarea>
-              </div>
-              <div className="flex justify-end">
-                <button 
-                  type="button" 
-                  className="bg-red-500 text-white px-4 py-2 rounded mr-2" 
-                  onClick={toggleFormVisibility}
-                >
-                  Close
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="glass-panel w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold text-white">Notify team</h2>
+            <p className="mt-1 text-sm text-slate-400">Creates a city announcement for this meeting</p>
+            <form onSubmit={handleNotify} className="mt-5 space-y-4">
+              <Field label="Title">
+                <input
+                  className={inputClass}
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  placeholder="Site standup — Room 42"
+                  required
+                />
+              </Field>
+              <Field label="Message">
+                <textarea
+                  className={`${inputClass} min-h-[96px]`}
+                  value={form.message}
+                  onChange={(e) => setForm({ ...form, message: e.target.value })}
+                  placeholder="Join the video room from Training hub"
+                />
+              </Field>
+              <div className="flex justify-end gap-2">
+                <button type="button" className="btn" onClick={() => setShowForm(false)}>
+                  Cancel
                 </button>
-                <button 
-                  type="submit" 
-                  className="bg-blue-500 text-white px-4 py-2 rounded"
-                >
-                  Submit
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? "Sending…" : "Send"}
                 </button>
               </div>
             </form>

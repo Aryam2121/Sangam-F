@@ -133,6 +133,9 @@ export const fetchPathById = async (pathId) => {
   return unwrapApiData(payload) || payload;
 };
 
+export const saveProjectPath = (body) =>
+  apiFetch("/api/path", { method: "POST", body: JSON.stringify(body) });
+
 export const fetchCompletedPathById = async (pathId) => {
   const payload = await apiFetch(`/api/getcompletedpathbyid/${pathId}`);
   return unwrapApiData(payload) || payload;
@@ -234,6 +237,127 @@ export const fetchActivityTimeline = async (params = {}) => {
   const payload = await apiFetch(`/api/activity/timeline${query ? `?${query}` : ""}`);
   return unwrapApiData(payload)?.timeline || payload?.timeline || [];
 };
+
+export const markNotificationsRead = (notificationIds) =>
+  apiFetch("/api/notifications/read", {
+    method: "POST",
+    body: JSON.stringify({ notificationIds }),
+  });
+
+export const markAllNotificationsRead = () =>
+  apiFetch("/api/notifications/read-all", { method: "POST" });
+
+export const fetchCityKpis = (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")
+  ).toString();
+  return apiFetch(`/api/kpi/city${query ? `?${query}` : ""}`);
+};
+
+export const exportKpiReport = (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")
+  ).toString();
+  return apiFetch(`/api/kpi/export${query ? `?${query}` : ""}`);
+};
+
+export const fetchWorkflowRequests = (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")
+  ).toString();
+  return apiFetch(`/api/workflow${query ? `?${query}` : ""}`);
+};
+
+export const createWorkflowRequest = (body) =>
+  apiFetch("/api/workflow", { method: "POST", body: JSON.stringify(body) });
+
+export const updateWorkflowRequest = (id, body) =>
+  apiFetch(`/api/workflow/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+
+export const escalateWorkflowRequests = () =>
+  apiFetch("/api/workflow/escalate", { method: "POST" });
+
+export const fetchAnnouncements = (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")
+  ).toString();
+  return apiFetch(`/api/announcements${query ? `?${query}` : ""}`);
+};
+
+export const createAnnouncement = (body) =>
+  apiFetch("/api/announcements", { method: "POST", body: JSON.stringify(body) });
+
+export const deleteAnnouncement = (id) =>
+  apiFetch(`/api/announcements/${id}`, { method: "DELETE" });
+
+export const fetchBudgetSummary = (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")
+  ).toString();
+  return apiFetch(`/api/budget/summary${query ? `?${query}` : ""}`);
+};
+
+export const createBudgetEntry = (body) =>
+  apiFetch("/api/budget/entry", { method: "POST", body: JSON.stringify(body) });
+
+export const updateProjectBudgetCap = (projectId, body) =>
+  apiFetch(`/api/budget/project/${projectId}`, { method: "PATCH", body: JSON.stringify(body) });
+
+export const fetchAuditTrail = (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")
+  ).toString();
+  return apiFetch(`/api/audit/trail${query ? `?${query}` : ""}`);
+};
+
+export const fetchAuditStats = () => apiFetch("/api/audit/stats");
+
+export const fetchMapHubData = (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")
+  ).toString();
+  return apiFetch(`/api/geo/hub${query ? `?${query}` : ""}`);
+};
+
+export const fetchGeoLayers = () => apiFetch("/api/geo/layers");
+
+export const uploadGeoLayer = (body) =>
+  apiFetch("/api/geo/layers", { method: "POST", body: JSON.stringify(body) });
+
+export const deleteGeoLayer = (id) =>
+  apiFetch(`/api/geo/layers/${id}`, { method: "DELETE" });
+
+export const syncProjectLocations = () =>
+  apiFetch("/api/geo/sync-locations", { method: "POST" });
+
+export const updateProjectLocation = (projectId, body) =>
+  apiFetch(`/api/geo/project/${projectId}/location`, { method: "PATCH", body: JSON.stringify(body) });
+
+export const fetchWebhooks = () => apiFetch("/api/integrations/webhooks");
+
+export const createWebhook = (body) =>
+  apiFetch("/api/integrations/webhooks", { method: "POST", body: JSON.stringify(body) });
+
+export const testWebhook = (id) =>
+  apiFetch(`/api/integrations/webhooks/${id}/test`, { method: "POST" });
+
+export const sendIntegrationAlert = (body) =>
+  apiFetch("/api/integrations/alert", { method: "POST", body: JSON.stringify(body) });
+
+export const fetchMlPrefill = (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")
+  ).toString();
+  return apiFetch(`/api/ml/prefill${query ? `?${query}` : ""}`);
+};
+
+export const markSeminarAttendance = (seminarId, body = {}) =>
+  apiFetch(`/api/seminars/${seminarId}/attend`, { method: "POST", body: JSON.stringify(body) });
+
+export const fetchSeminarAttendance = (seminarId) =>
+  apiFetch(`/api/seminars/${seminarId}/attendance`);
+
+export const fetchMySeminarCertificates = () => apiFetch("/api/seminars/certificates/me");
 
 export const mlPredict = (path, body) =>
   apiFetch(path, {
